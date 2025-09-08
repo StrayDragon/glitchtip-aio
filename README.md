@@ -7,60 +7,49 @@
 ### 一键部署
 
 ```bash
-# 即用即销毁模式（数据存储在容器内部）
-./deploy.sh
-
-# 数据持久化模式（数据存储在宿主机）
-PERSIST_DATA=true ./deploy.sh
+# 默认部署（端口 8000）
+just deploy
 
 # 自定义端口部署
-./deploy.sh 8080
+just deploy-port 8080
 
-# 自定义端口和域名
-./deploy.sh 8080 http://yourdomain.com
+# 数据持久化部署
+just deploy-persist
 
-# 完整自定义（数据持久化模式）
-PERSIST_DATA=true ./deploy.sh 8080 http://yourdomain.com /custom/data/path
+# 完整自定义部署
+PERSIST_DATA=true just deploy-port 8080
 ```
 
 ### 服务管理
 
 ```bash
-# 启动服务
-./manage.sh start
+# 容器生命周期
+just start          # 启动服务
+just stop           # 停止服务
+just restart        # 重启服务
+just status         # 查看状态
 
-# 停止服务
-./manage.sh stop
+# 日志管理
+just logs           # 查看所有日志
+just logs-app       # Django 应用日志
+just logs-celery    # Celery 工作日志
+just logs-pgsql     # PostgreSQL 日志
+just logs-redis     # Redis 日志
 
-# 重启服务
-./manage.sh restart
+# 数据库操作
+just backup         # 备份数据库
+just restore        # 恢复数据库
+just migrate        # 运行数据库迁移
+just psql           # 进入 PostgreSQL shell
+just redis          # 进入 Redis CLI
 
-# 查看日志
-./manage.sh logs
+# 容器交互
+just shell          # 进入容器 shell
+just django <cmd>   # 运行 Django 命令
 
-# 查看状态
-./manage.sh status
-
-# 备份数据库
-./manage.sh backup
-
-# 恢复数据库
-./manage.sh restore
-
-# 运行数据库迁移
-./manage.sh migrate
-
-# 进入容器
-./manage.sh shell
-
-# 进入数据库
-./manage.sh psql
-
-# 进入 Redis
-./manage.sh redis
-
-# 显示系统信息
-./manage.sh info
+# 构建和清理
+just rebuild        # 重新构建镜像
+just clean          # 清理容器和镜像
 ```
 
 ## 优化特性
@@ -76,9 +65,11 @@ PERSIST_DATA=true ./deploy.sh 8080 http://yourdomain.com /custom/data/path
 - **错误处理**: 完善的错误处理和重试机制
 
 ### 易用性优化
+- **Just 命令系统**: 现代化的命令运行器，支持环境变量和配置
 - **一键部署**: 自动处理所有依赖和配置
 - **智能检测**: 自动检测端口占用、网络连接等
 - **详细日志**: 清晰的进度提示和错误信息
+- **模块化命令**: 按功能分类的命令集合
 
 ## 包含的服务
 
@@ -153,7 +144,7 @@ Port: 6379
 
 ```bash
 # 查看容器状态
-./manage.sh status
+just status
 
 # 查看资源使用
 docker stats glitchtip-aio
@@ -166,12 +157,13 @@ docker exec glitchtip-aio supervisorctl status
 
 ```bash
 # 查看所有日志
-./manage.sh logs
+just logs
 
 # 查看特定服务日志
-docker logs glitchtip-aio | grep postgres
-docker logs glitchtip-aio | grep redis
-docker logs glitchtip-aio | grep web
+just logs-app       # Django 应用
+just logs-celery    # Celery 工作进程
+just logs-pgsql     # PostgreSQL
+just logs-redis     # Redis
 
 # 查看最近的错误
 docker logs --tail 100 glitchtip-aio | grep ERROR
@@ -183,13 +175,16 @@ docker logs --tail 100 glitchtip-aio | grep ERROR
 
 ```bash
 # 进入数据库
-./manage.sh psql
+just psql
 
 # 备份数据库
-./manage.sh backup
+just backup
 
 # 恢复数据库
-./manage.sh restore
+just restore
+
+# 运行迁移
+just migrate
 
 # 手动备份
 docker exec glitchtip-aio pg_dump -U postgres > backup.sql
@@ -202,7 +197,7 @@ docker exec -i glitchtip-aio psql -U postgres < backup.sql
 
 ```bash
 # 进入 Redis CLI
-./manage.sh redis
+just redis
 
 # 查看键值
 docker exec glitchtip-aio redis-cli KEYS "*"
@@ -218,16 +213,16 @@ docker exec glitchtip-aio redis-cli INFO
 
 ```bash
 # 进入容器 shell
-./manage.sh shell
+just shell
+
+# 运行 Django 命令
+just django <command>
 
 # 重新构建镜像
-./manage.sh rebuild
-
-# 更新到最新版本
-./manage.sh update
+just rebuild
 
 # 清理容器和镜像
-./manage.sh clean
+just clean
 ```
 
 ## 性能优化建议
@@ -262,12 +257,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3
 ### 更新到最新版本
 
 ```bash
-# 自动更新
-./manage.sh update
+# 重新构建镜像
+just rebuild
 
 # 手动更新
 docker pull glitchtip/glitchtip:v5.1
-./manage.sh rebuild
+just rebuild
 ```
 
 ### 版本回滚
@@ -300,26 +295,26 @@ data/
 
 ```bash
 # 运行数据库迁移
-./manage.sh migrate
+just migrate
 
 # 查看迁移状态
-docker exec glitchtip-aio python manage.py showmigrations
+just django showmigrations
 
 # 创建迁移文件
-docker exec -it glitchtip-aio python manage.py makemigrations
+just django makemigrations
 
 # 回滚迁移
-docker exec glitchtip-aio python manage.py migrate <app_name> <migration_name>
+just django migrate <app_name> <migration_name>
 ```
 
 ### 备份和恢复
 
 ```bash
 # 创建备份
-./manage.sh backup
+just backup
 
 # 恢复备份
-./manage.sh restore
+just restore
 
 # 手动备份
 docker exec glitchtip-aio pg_dump -U postgres | gzip > backup-$(date +%Y%m%d).sql.gz
@@ -331,8 +326,8 @@ gunzip -c backup-20231201.sql.gz | docker exec -i glitchtip-aio psql -U postgres
 ### 系统信息查看
 
 ```bash
-# 查看详细的系统信息
-./manage.sh info
+# 查看容器状态
+just status
 
 # 查看容器资源使用
 docker stats glitchtip-aio
@@ -371,7 +366,7 @@ docker exec glitchtip-aio supervisorctl status
    # 检查端口占用
    netstat -tulpn | grep :8000
    # 使用其他端口
-   ./deploy.sh 8080
+   just deploy-port 8080
    ```
 
 2. **镜像拉取失败**
@@ -400,9 +395,18 @@ docker exec glitchtip-aio supervisorctl status
 4. **服务启动缓慢**
    ```bash
    # 查看启动日志
-   docker logs glitchtip-aio
+   just logs
    # 检查资源使用
    docker stats glitchtip-aio
+   ```
+
+5. **Just 命令不可用**
+   ```bash
+   # 安装 Just
+   curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
+   # 或使用包管理器
+   # Ubuntu/Debian: sudo apt install just
+   # macOS: brew install just
    ```
 
 ### 调试技巧
@@ -415,10 +419,13 @@ docker top glitchtip-aio
 docker inspect glitchtip-aio
 
 # 进入调试模式
-docker exec -it glitchtip-aio bash
+just shell
 
 # 查看网络连接
 docker exec glitchtip-aio netstat -tulpn
+
+# 查看所有可用命令
+just --list
 ```
 
 ## 性能对比
@@ -443,7 +450,8 @@ docker exec glitchtip-aio netstat -tulpn
 ---
 
 **提示**: 
-- 首次部署请使用 `./deploy.sh`，日常管理使用 `./manage.sh`
-- 默认为即用即销毁模式，数据存储在容器内部
-- 设置 `PERSIST_DATA=true` 启用数据持久化模式
+- 使用 `just deploy` 进行快速部署
+- 所有管理命令都通过 `just` 运行，使用 `just --list` 查看所有可用命令
+- 支持环境变量配置，如 `PERSIST_DATA=true just deploy-persist`
 - 数据持久化模式适合生产环境和需要长期使用的场景
+- 需要先安装 Just 命令运行器
