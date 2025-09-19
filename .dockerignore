@@ -94,10 +94,9 @@ coverage.xml
 *.backup
 
 # Docker volumes
-data/
+*data/
+example/*data
 volumes/
-postgres-data/
-redis-data/
 
 # Runtime data
 pids/

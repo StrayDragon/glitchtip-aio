@@ -351,3 +351,107 @@ help:
     echo "  EXPOSE_WEB_PORT=true/false"
     echo "  EXPOSE_DB_PORT=true/false"
     echo "  EXPOSE_REDIS_PORT=true/false"
+    echo ""
+    echo "示例命令:"
+    echo "  just example-build       # 构建示例镜像"
+    echo "  just example-run         # 运行示例容器"
+    echo "  just zip                 # 打包项目代码"
+
+# =============================================================================
+# 示例命令
+# =============================================================================
+
+# 构建示例镜像
+example-build:
+    #!/usr/bin/env bash
+    set -e
+    echo "构建示例镜像..."
+    if [ ! -f "example/Dockerfile" ]; then
+        echo "错误: example/Dockerfile 不存在"
+        exit 1
+    fi
+    docker build -t glitchtip-aio-example example/
+    echo "✓ 示例镜像构建完成: glitchtip-aio-example"
+
+# 运行示例容器
+example-run:
+    #!/usr/bin/env bash
+    set -e
+    echo "运行示例容器..."
+
+    # 检查示例镜像是否存在
+    if ! docker images | grep -q "glitchtip-aio-example"; then
+        echo "构建示例镜像..."
+        just example-build
+    fi
+
+    # 创建数据目录
+    mkdir -p ./data/{postgres,redis,backups,logs,uploads}
+
+    # 停止现有容器
+    docker stop glitchtip-aio-example 2>/dev/null || true
+    docker rm glitchtip-aio-example 2>/dev/null || true
+
+    # 运行新容器
+    docker run -d \
+        --name glitchtip-aio-example \
+        --restart unless-stopped \
+        -p 8000:8000 \
+        -v "$(pwd)/data/postgres":/data/postgres \
+        -v "$(pwd)/data/redis":/data/redis \
+        -v "$(pwd)/data/backups":/backups \
+        -v "$(pwd)/data/logs":/logs \
+        -v "$(pwd)/data/uploads":/uploads \
+        -e SECRET_KEY="example-secret-key-change-in-production" \
+        -e PORT=8000 \
+        -e GLITCHTIP_DOMAIN="http://localhost:8000" \
+        -e DEBUG=false \
+        glitchtip-aio-example
+
+    echo "✓ 示例容器已启动"
+    echo "访问地址: http://localhost:8000"
+    echo "查看日志: docker logs -f glitchtip-aio-example"
+
+# =============================================================================
+# 打包命令
+# =============================================================================
+
+# 打包项目代码（忽略.gitignore中的文件）
+zip:
+    #!/usr/bin/env bash
+    set -e
+
+    # 设置项目名称和版本
+    PROJECT_NAME="glitchtip-aio"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    ZIP_FILE="${PROJECT_NAME}-${TIMESTAMP}.zip"
+
+    echo "打包项目代码到 ${ZIP_FILE}..."
+
+    # 创建临时目录
+    TEMP_DIR=$(mktemp -d)
+
+    # 复制项目文件（排除.git和.gitignore中的文件）
+    rsync -av --progress \
+        --exclude=.git \
+        --exclude=node_modules \
+        --exclude=*.log \
+        --exclude=data \
+        --exclude=*.zip \
+        --exclude=.DS_Store \
+        --exclude=Thumbs.db \
+        ./ "${TEMP_DIR}/${PROJECT_NAME}/"
+
+    # 创建zip文件
+    cd "${TEMP_DIR}"
+    zip -r "${ZIP_FILE}" "${PROJECT_NAME}/"
+
+    # 移动zip文件到项目根目录
+    mv "${ZIP_FILE}" "$(pwd)/"
+
+    # 清理临时目录
+    rm -rf "${TEMP_DIR}"
+
+    echo "✓ 项目已打包到 ${ZIP_FILE}"
+    echo "文件大小: $(du -h "${ZIP_FILE}" | cut -f1)"
+    echo "包含文件: $(unzip -l "${ZIP_FILE}" | grep -c "文件")"
