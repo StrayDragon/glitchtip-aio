@@ -3,6 +3,7 @@ FROM glitchtip/glitchtip:v5.1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+ENV PORT=8000
 
 USER root
 

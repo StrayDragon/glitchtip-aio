@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 设置默认环境变量
+# 设置默认环境变量 - 与官方 docker-compose 保持一致
 export SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
-export PORT="${PORT:-8000}"
+export PORT="${PORT:-8000}"  # 默认 8000，但允许环境变量覆盖
 export GLITCHTIP_DOMAIN="${GLITCHTIP_DOMAIN:-http://localhost:8000}"
 export DEFAULT_FROM_EMAIL="${DEFAULT_FROM_EMAIL:-glitchtip@localhost}"
 export DEBUG="${DEBUG:-false}"
