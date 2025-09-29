@@ -1,0 +1,72 @@
+#!/bin/bash
+echo "Running comprehensive health check..."
+
+# 检查PostgreSQL
+if nc -z localhost 5432; then
+    echo "✓ PostgreSQL is running"
+
+    # 检查PostgreSQL连接
+    if timeout 5 psql -U postgres -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+        echo "✓ PostgreSQL connection is working"
+    else
+        echo "✗ PostgreSQL connection failed"
+        exit 1
+    fi
+else
+    echo "✗ PostgreSQL is not running"
+    exit 1
+fi
+
+# 检查Redis
+if nc -z localhost 6379; then
+    echo "✓ Redis is running"
+
+    # 检查Redis连接
+    if timeout 5 redis-cli ping > /dev/null 2>&1; then
+        echo "✓ Redis connection is working"
+    else
+        echo "✗ Redis connection failed"
+        exit 1
+    fi
+else
+    echo "✗ Redis is not running"
+    exit 1
+fi
+
+# 检查Django应用
+if curl -f http://localhost:8000/_health/ > /dev/null 2>&1; then
+    echo "✓ Django application is running"
+
+    # 检查Django应用响应时间
+    response_time=$(curl -o /dev/null -s -w '%{time_total}' http://localhost:8000/_health/)
+    echo "✓ Django application response time: ${response_time}s"
+
+    # 检查响应时间是否过长
+    if [ "$(echo "$response_time > 5.0" | awk '{print ($1 > 5.0) ? 1 : 0}')" = "1" ]; then
+        echo "⚠ Django application response time is slow"
+    fi
+else
+    echo "✗ Django application is not responding"
+    exit 1
+fi
+
+# 检查Celery工作进程
+if pgrep -f "celery.*worker" > /dev/null; then
+    echo "✓ Celery worker is running"
+else
+    echo "✗ Celery worker is not running"
+    exit 1
+fi
+
+# 检查系统资源
+memory_usage=$(free | grep Mem | awk '{printf "%.2f", $3/$2 * 100.0}')
+echo "✓ Memory usage: ${memory_usage}%"
+
+disk_usage=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+echo "✓ Disk usage: ${disk_usage}%"
+
+if [ "$disk_usage" -gt 90 ]; then
+    echo "⚠ Disk usage is high"
+fi
+
+echo "✓ All services are healthy"

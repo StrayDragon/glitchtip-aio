@@ -1,10 +1,3 @@
-# Glitchtip AIO - Just 命令配置文件
-# https://just.systems/man/zh/
-
-# =============================================================================
-# 默认命令
-# =============================================================================
-
 # 默认命令 - 显示可用命令列表
 default:
     @just --list
@@ -23,69 +16,15 @@ export BACKUP_DIR := DATA_DIR + "/backups"
 export DEFAULT_PORT := "8000"
 export DEFAULT_DOMAIN := "http://localhost:8000"
 
-# 环境变量（可通过命令行覆盖）
-export PERSIST_DATA := env_var_or_default("PERSIST_DATA", "false")
-export EXPOSE_WEB_PORT := env_var_or_default("EXPOSE_WEB_PORT", "true")
-export EXPOSE_DB_PORT := env_var_or_default("EXPOSE_DB_PORT", "false")
-export EXPOSE_REDIS_PORT := env_var_or_default("EXPOSE_REDIS_PORT", "false")
-
-# =============================================================================
-# 核心部署命令
-# =============================================================================
-
-# 默认部署
-deploy:
-    #!/usr/bin/env bash
-    set -e
-    just _deploy "{{DEFAULT_PORT}}" "{{DEFAULT_DOMAIN}}" "{{DATA_DIR}}"
-
-# 自定义端口部署
-deploy-port port:
-    #!/usr/bin/env bash
-    set -e
-    just _deploy "{{port}}" "{{DEFAULT_DOMAIN}}" "{{DATA_DIR}}"
-
-# 自定义域名和端口部署
-deploy-custom port domain="http://0.0.0.0":
-    #!/usr/bin/env bash
-    set -e
-    just _deploy "{{port}}" "{{domain}}" "{{DATA_DIR}}"
-
-# 持久化部署
-deploy-persist:
-    #!/usr/bin/env bash
-    set -e
-    PERSIST_DATA=true just _deploy "{{DEFAULT_PORT}}" "{{DEFAULT_DOMAIN}}" "{{DATA_DIR}}"
-
 # =============================================================================
 # 容器生命周期管理
 # =============================================================================
-
-# 启动服务
-start:
-    docker start {{CONTAINER_NAME}} && echo "服务已启动"
-
-# 停止服务
-stop:
-    docker stop {{CONTAINER_NAME}} && echo "服务已停止"
-
-# 重启服务
-restart:
-    docker restart {{CONTAINER_NAME}} && echo "服务已重启"
 
 # 查看完整日志
 logs:
     #!/usr/bin/env bash
     echo "可用日志命令:"
-    echo "  just logs           # 查看容器完整日志"
-    echo "  just logs-supervisor # 查看supervisor主日志"
-    echo "  just logs-app       # 查看应用日志"
-    echo "  just logs-celery    # 查看Celery日志"
-    echo "  just logs-pgsql     # 查看PostgreSQL日志"
-    echo "  just logs-redis     # 查看Redis日志"
-    echo "  just logs-migrate   # 查看迁移日志"
-    echo "  just logs-errors    # 查看错误日志"
-    echo ""
+    echo "  just logs*"
     echo "正在查看容器完整日志..."
     docker logs -f {{CONTAINER_NAME}}
 
@@ -122,30 +61,6 @@ logs-errors:
     echo "=== Celery错误日志 ==="
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/celery.err.log
 
-# 查看状态
-status:
-    #!/usr/bin/env bash
-    CONTAINER_NAME="{{CONTAINER_NAME}}"
-    echo "容器状态:"
-    docker ps -a --filter "name=$CONTAINER_NAME"
-    echo ""
-    if docker ps | grep -q "$CONTAINER_NAME"; then
-        echo "健康检查:"
-        # 获取实际映射的端口
-        MAPPED_PORT=$(docker port "$CONTAINER_NAME" 8000 | cut -d: -f2 | head -1)
-        if [ -z "$MAPPED_PORT" ]; then
-            echo "✗ 无法获取映射端口"
-        elif curl -f http://localhost:$MAPPED_PORT/_health/ >/dev/null 2>&1; then
-            echo "✓ 应用运行正常 (端口: $MAPPED_PORT)"
-        else
-            echo "✗ 应用无响应 (端口: $MAPPED_PORT)"
-        fi
-    fi
-
-# =============================================================================
-# 数据库管理
-# =============================================================================
-
 # 备份数据库
 backup:
     #!/usr/bin/env bash
@@ -164,7 +79,7 @@ restore:
     echo "数据库已恢复"
 
 # 运行数据库迁移
-migrate:
+run-migrate:
     docker exec {{CONTAINER_NAME}} python manage.py migrate --noinput
 
 # =============================================================================
@@ -172,19 +87,19 @@ migrate:
 # =============================================================================
 
 # 进入容器 shell
-shell:
+it-shell:
     docker exec -it {{CONTAINER_NAME}} bash
 
 # 进入 PostgreSQL
-psql:
+it-shell-psql:
     docker exec -it {{CONTAINER_NAME}} psql -U postgres
 
 # 进入 Redis CLI
-redis:
+it-shell-redis:
     docker exec -it {{CONTAINER_NAME}} redis-cli
 
 # Django 管理命令
-django *args:
+it-django-mange *args:
     docker exec {{CONTAINER_NAME}} python manage.py {{args}}
 
 # =============================================================================
@@ -192,7 +107,7 @@ django *args:
 # =============================================================================
 
 # 重新构建镜像
-rebuild:
+build:
     #!/usr/bin/env bash
     docker stop {{CONTAINER_NAME}} 2>/dev/null || true
     docker rm {{CONTAINER_NAME}} 2>/dev/null || true
@@ -207,217 +122,8 @@ clean:
     docker rmi {{IMAGE_NAME}} 2>/dev/null || true
     echo "容器和镜像已清理"
 
-# 显示系统信息
-info:
-    #!/usr/bin/env bash
-    CONTAINER_NAME="{{CONTAINER_NAME}}"
-    DATA_DIR="{{DATA_DIR}}"
-    echo "系统信息:"
-    echo "  Docker 版本: $(docker --version | cut -d' ' -f3 | cut -d',' -f1)"
-    echo "  容器状态: $(docker ps -a --filter "name=$CONTAINER_NAME" | head -n 2 | tail -n 1 | awk '{print $7}' 2>/dev/null || echo "不存在")"
-    if [ -d "$DATA_DIR" ]; then
-        echo "  数据目录大小: $(du -sh "$DATA_DIR" 2>/dev/null | cut -f1)"
-    fi
-
-# =============================================================================
-# 内部函数
-# =============================================================================
-
-# 内部部署函数
-_deploy port domain data_path:
-    #!/usr/bin/env bash
-    set -e
-    
-    echo "Glitchtip AIO 部署"
-    echo "端口: {{port}}, 域名: {{domain}}"
-    echo "数据持久化: {{PERSIST_DATA}}"
-    
-    # 检查 Docker
-    if ! command -v docker &> /dev/null; then
-        echo "错误: Docker 未安装"
-        exit 1
-    fi
-    
-    # 创建数据目录
-    if [ "{{PERSIST_DATA}}" = "true" ]; then
-        mkdir -p "{{data_path}}"/{postgres,data,redis,data,backups,logs,uploads}
-        echo "数据目录已创建"
-    fi
-    
-    # 清理现有容器
-    docker stop {{CONTAINER_NAME}} 2>/dev/null || true
-    docker rm {{CONTAINER_NAME}} 2>/dev/null || true
-    
-    # 构建镜像
-    echo "构建镜像..."
-    docker build -t {{IMAGE_NAME}} .
-    
-    # 生成配置
-    SECRET_KEY=$(openssl rand -hex 32)
-    
-    # 构建运行命令
-    DOCKER_CMD="docker run -d \
-        --name {{CONTAINER_NAME}} \
-        -e SECRET_KEY=$SECRET_KEY \
-        -e PORT={{port}} \
-        -e GLITCHTIP_DOMAIN={{domain}} \
-        -e DEBUG=false \
-        -e PERSIST_DATA={{PERSIST_DATA}}"
-    
-    # 添加端口映射
-    if [ "{{EXPOSE_WEB_PORT}}" = "true" ]; then
-        DOCKER_CMD="$DOCKER_CMD -p {{port}}:8000"
-    fi
-    if [ "{{EXPOSE_DB_PORT}}" = "true" ]; then
-        DOCKER_CMD="$DOCKER_CMD -p 5432:5432"
-    fi
-    if [ "{{EXPOSE_REDIS_PORT}}" = "true" ]; then
-        DOCKER_CMD="$DOCKER_CMD -p 6379:6379"
-    fi
-    
-    # 添加数据卷
-    if [ "{{PERSIST_DATA}}" = "true" ]; then
-        DOCKER_CMD="$DOCKER_CMD \
-            -v {{data_path}}/postgres/data:/var/lib/postgresql \
-            -v {{data_path}}/redis/data:/var/lib/redis \
-            -v {{data_path}}/backups:/backups \
-            -v {{data_path}}/logs:/var/log \
-            -v {{data_path}}/uploads:/code/uploads"
-    fi
-    
-    DOCKER_CMD="$DOCKER_CMD \
-        --restart unless-stopped \
-        {{IMAGE_NAME}}"
-    
-    # 启动容器
-    echo "启动容器..."
-    eval $DOCKER_CMD
-    
-    # 等待服务启动
-    echo "等待服务启动..."
-    for i in {1..60}; do
-        if curl -f http://localhost:{{port}}/_health/ &>/dev/null; then
-            echo "服务已启动!"
-            echo "访问地址: {{domain}}:{{port}}"
-            break
-        fi
-        sleep 1
-    done
-
-# =============================================================================
-# 帮助信息
-# =============================================================================
-
-# 显示帮助
-help:
-    #!/usr/bin/env bash
-    echo "Glitchtip AIO - Just 命令管理"
-    echo "================================"
-    echo ""
-    echo "部署命令:"
-    echo "  just deploy              # 默认部署"
-    echo "  just deploy-port 8080    # 自定义端口"
-    echo "  just deploy-custom 9000 [domain] # 自定义域名和端口部署 (默认域名: 0.0.0.0)"
-    echo "  just deploy-persist      # 持久化部署"
-    echo ""
-    echo "容器管理:"
-    echo "  just start/stop/restart  # 启动/停止/重启"
-    echo "  just logs               # 查看完整日志"
-    echo "  just status             # 查看状态"
-    echo "  just shell              # 进入容器"
-    echo ""
-    echo "日志查看:"
-    echo "  just logs               # 显示所有日志选项"
-    echo "  just logs-supervisor    # Supervisor主日志"
-    echo "  just logs-app           # 应用日志"
-    echo "  just logs-celery        # Celery日志"
-    echo "  just logs-pgsql         # PostgreSQL日志"
-    echo "  just logs-redis         # Redis日志"
-    echo "  just logs-migrate       # 迁移日志"
-    echo "  just logs-errors        # 错误日志"
-    echo ""
-    echo "数据库管理:"
-    echo "  just backup/restore     # 备份/恢复"
-    echo "  just migrate            # 运行迁移"
-    echo "  just psql/redis         # 进入数据库"
-    echo ""
-    echo "维护命令:"
-    echo "  just rebuild            # 重新构建"
-    echo "  just clean              # 清理"
-    echo "  just info               # 系统信息"
-    echo ""
-    echo "环境变量:"
-    echo "  PERSIST_DATA=true/false"
-    echo "  EXPOSE_WEB_PORT=true/false"
-    echo "  EXPOSE_DB_PORT=true/false"
-    echo "  EXPOSE_REDIS_PORT=true/false"
-    echo ""
-    echo "示例命令:"
-    echo "  just example-build       # 构建示例镜像"
-    echo "  just example-run         # 运行示例容器"
-    echo "  just zip                 # 打包项目代码"
-
-# =============================================================================
-# 示例命令
-# =============================================================================
-
-# 构建示例镜像
-example-build:
-    #!/usr/bin/env bash
-    set -e
-    echo "构建示例镜像..."
-    if [ ! -f "example/Dockerfile" ]; then
-        echo "错误: example/Dockerfile 不存在"
-        exit 1
-    fi
-    docker build -t glitchtip-aio-example example/
-    echo "✓ 示例镜像构建完成: glitchtip-aio-example"
-
-# 运行示例容器
-example-run:
-    #!/usr/bin/env bash
-    set -e
-    echo "运行示例容器..."
-
-    # 检查示例镜像是否存在
-    if ! docker images | grep -q "glitchtip-aio-example"; then
-        echo "构建示例镜像..."
-        just example-build
-    fi
-
-    # 创建数据目录
-    mkdir -p ./data/{postgres,redis,backups,logs,uploads}
-
-    # 停止现有容器
-    docker stop glitchtip-aio-example 2>/dev/null || true
-    docker rm glitchtip-aio-example 2>/dev/null || true
-
-    # 运行新容器
-    docker run -d \
-        --name glitchtip-aio-example \
-        --restart unless-stopped \
-        -p 8000:8000 \
-        -v "$(pwd)/data/postgres":/data/postgres \
-        -v "$(pwd)/data/redis":/data/redis \
-        -v "$(pwd)/data/backups":/backups \
-        -v "$(pwd)/data/logs":/logs \
-        -v "$(pwd)/data/uploads":/uploads \
-        -e SECRET_KEY="example-secret-key-change-in-production" \
-        -e PORT=8000 \
-        -e GLITCHTIP_DOMAIN="http://localhost:8000" \
-        -e DEBUG=false \
-        glitchtip-aio-example
-
-    echo "✓ 示例容器已启动"
-    echo "访问地址: http://localhost:8000"
-    echo "查看日志: docker logs -f glitchtip-aio-example"
-
-# =============================================================================
-# 打包命令
-# =============================================================================
-
 # 打包项目代码（忽略.gitignore中的文件）
-zip:
+package-to-zip:
     #!/usr/bin/env bash
     set -e
 

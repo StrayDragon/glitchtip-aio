@@ -1,457 +1,278 @@
-# Glitchtip AIO - 单容器部署方案
+# Glitchtip AIO - All-in-One 容器化部署
 
-基于 `glitchtip/glitchtip:v5.1` 的单容器部署方案，集成了 PostgreSQL、Redis 和 Glitchtip 服务，支持一键部署。
+Glitchtip AIO 是一个单容器部署解决方案，将 Glitchtip（开源错误跟踪平台）与其所有依赖项（PostgreSQL、Redis、Django、Celery）打包在一个 Docker 容器中。
 
-## 快速开始
+## 🚀 快速开始
 
-### 一键部署
+### 1. 配置管理
 
 ```bash
-# 默认部署（端口 8000）
+# 初始化配置文件
+./manage-config.sh init
+
+# 设置生产环境配置
+./manage-config.sh prod
+
+# 设置开发环境配置
+./manage-config.sh dev
+
+# 显示当前配置
+./manage-config.sh show
+
+# 测试配置文件
+./manage-config.sh test
+```
+
+### 2. 快速部署
+
+```bash
+# 部署开发环境
+./quick-deploy.sh dev
+
+# 部署生产环境
+./quick-deploy.sh prod
+
+# 使用自定义配置部署
+./quick-deploy.sh custom
+```
+
+### 3. 使用 Just 命令
+
+```bash
+# 基础部署
 just deploy
 
 # 自定义端口部署
-just deploy-port 8080
+just deploy-port 9000
 
-# 数据持久化部署
-just deploy-persist
+# 自定义域名部署
+just deploy-custom 8000 https://mydomain.com
 
-# 完整自定义部署
-PERSIST_DATA=true just deploy-port 8080
+# 生产环境部署
+just deploy-prod https://mydomain.com
 ```
 
-### 服务管理
+## 📋 环境变量配置
+
+### 关键配置项
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `DEFAULT_DOMAIN` | `http://localhost:8004` | 访问域名 |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | 允许的主机名 |
+| `CSRF_TRUSTED_ORIGINS` | `$DEFAULT_DOMAIN` | CSRF 可信来源 |
+| `ENABLE_USER_REGISTRATION` | `false` | 是否允许用户注册 |
+| `ENABLE_ORGANIZATION_CREATION` | `false` | 是否允许组织创建 |
+| `DEBUG` | `false` | 调试模式 |
+| `SECRET_KEY` | 自动生成 | Django 密钥 |
+| `DB_PASSWORD` | 自动生成 | 数据库密码 |
+| `PERSIST_DATA` | `false` | 数据持久化 |
+
+### 完整配置示例
 
 ```bash
-# 容器生命周期
-just start          # 启动服务
-just stop           # 停止服务
-just restart        # 重启服务
-just status         # 查看状态
+# .env 文件示例
+DEFAULT_DOMAIN=https://mydomain.com
+ALLOWED_HOSTS=localhost,127.0.0.1,mydomain.com
+CSRF_TRUSTED_ORIGINS=https://mydomain.com
+ENABLE_USER_REGISTRATION=false
+ENABLE_ORGANIZATION_CREATION=false
+DEBUG=false
+SECRET_KEY=your-secret-key-here
+DB_PASSWORD=your-database-password
+PERSIST_DATA=true
+```
 
-# 日志管理
-just logs           # 查看所有日志
-just logs-app       # Django 应用日志
-just logs-celery    # Celery 工作日志
-just logs-pgsql     # PostgreSQL 日志
-just logs-redis     # Redis 日志
+## 🛡️ 安全特性
+
+### 已实现的安全措施
+
+- ✅ **数据库安全**: PostgreSQL 只允许本地访问
+- ✅ **端口安全**: 只暴露 Web 服务端口
+- ✅ **认证安全**: SCRAM-SHA-256 强认证
+- ✅ **CSRF 保护**: 可信来源配置
+- ✅ **主机验证**: ALLOWED_HOSTS 配置
+- ✅ **用户管理**: 可禁用注册和组织创建
+- ✅ **进程隔离**: 专用用户运行服务
+
+### 安全最佳实践
+
+1. **生产环境配置**
+   ```bash
+   ENABLE_USER_REGISTRATION=false
+   ENABLE_ORGANIZATION_CREATION=false
+   DEBUG=false
+   ```
+
+2. **网络安全**
+   ```bash
+   EXPOSE_DB_PORT=false
+   EXPOSE_REDIS_PORT=false
+   ```
+
+3. **强密码配置**
+   ```bash
+   DB_PASSWORD=$(openssl rand -hex 32)
+   SECRET_KEY=$(openssl rand -hex 32)
+   ```
+
+## 🔧 管理脚本
+
+### 配置管理脚本 (`manage-config.sh`)
+
+```bash
+./manage-config.sh init      # 初始化配置
+./manage-config.sh prod      # 生产环境配置
+./manage-config.sh dev       # 开发环境配置
+./manage-config.sh show      # 显示当前配置
+./manage-config.sh test      # 测试配置
+./manage-config.sh clean     # 清理文件
+```
+
+### 快速部署脚本 (`quick-deploy.sh`)
+
+```bash
+./quick-deploy.sh dev        # 开发环境部署
+./quick-deploy.sh prod       # 生产环境部署
+./quick-deploy.sh custom     # 自定义配置部署
+```
+
+### Just 命令
+
+```bash
+# 部署命令
+just deploy                    # 默认部署
+just deploy-port 8080          # 自定义端口
+just deploy-custom 9000 https://mydomain.com  # 自定义域名
+
+# 容器管理
+just start/stop/restart        # 容器生命周期
+just status                    # 检查状态
+just logs                      # 查看日志
 
 # 数据库操作
-just backup         # 备份数据库
-just restore        # 恢复数据库
-just migrate        # 运行数据库迁移
-just psql           # 进入 PostgreSQL shell
-just redis          # 进入 Redis CLI
+just backup/restore            # 备份/恢复
+just migrate                   # 运行迁移
+just psql/redis                # 进入数据库
 
-# 容器交互
-just shell          # 进入容器 shell
-just django <cmd>   # 运行 Django 命令
-
-# 构建和清理
-just rebuild        # 重新构建镜像
-just clean          # 清理容器和镜像
+# 用户管理
+just user-create email         # 创建用户
+just user-list                 # 列出用户
+just user-superuser email      # 设置超级用户
 ```
 
-## 优化特性
+## 📊 服务状态
 
-### 性能优化
-- **基础镜像**: 使用官方 `glitchtip/glitchtip:v5.1`，避免重复构建
-- **镜像源**: 阿里云 APT 源 + Python pip 源，国内访问速度快
-- **进程管理**: Supervisor 精确控制各服务启动顺序
+### 健康检查
 
-### 稳定性优化
-- **健康检查**: 内置完整的服务健康检查机制
-- **自动重启**: 容器异常退出时自动重启
-- **错误处理**: 完善的错误处理和重试机制
-
-### 易用性优化
-- **Just 命令系统**: 现代化的命令运行器，支持环境变量和配置
-- **一键部署**: 自动处理所有依赖和配置
-- **智能检测**: 自动检测端口占用、网络连接等
-- **详细日志**: 清晰的进度提示和错误信息
-- **模块化命令**: 按功能分类的命令集合
-
-## 包含的服务
-
-| 服务 | 版本 | 端口 | 说明 |
-|------|------|------|------|
-| PostgreSQL | 17 | 5432 | 主数据库 |
-| Redis | 7.x | 6379 | 缓存和消息队列 |
-| Django | 4.x+ | 8000 | Glitchtip 主应用 |
-| Celery | 5.x+ | - | 后台任务处理 |
-| Supervisor | 4.x+ | - | 进程管理器 |
-
-## 配置选项
-
-### 环境变量
+容器包含健康检查，可以通过以下方式检查：
 
 ```bash
-# 应用配置
-SECRET_KEY=your-secret-key
-PORT=8000
-GLITCHTIP_DOMAIN=http://localhost:8000
-DEBUG=false
+# 检查容器状态
+docker ps | grep glitchtip-aio
 
-# 数据库配置
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
+# 查看健康状态
+docker inspect glitchtip-aio | grep Health
 
-# Redis 配置
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-
-# 邮件配置
-DEFAULT_FROM_EMAIL=glitchtip@localhost
-EMAIL_URL=consolemail://
+# 访问健康检查端点
+curl http://localhost:8004/_health/
 ```
 
-### 镜像源配置
+### 服务进程
 
-```bash
-# APT 源（阿里云）
-deb https://mirrors.aliyun.com/debian/ bookworm main
-deb https://mirrors.aliyun.com/debian/ bookworm-updates main
+容器内的服务包括：
+- **PostgreSQL**: 数据库服务
+- **Redis**: 缓存和消息队列
+- **Gunicorn**: Web 应用服务器
+- **Celery**: 后台任务处理器
+- **Supervisor**: 进程管理器
 
-# Python pip 源（阿里云）
-https://mirrors.aliyun.com/pypi/simple/
+## 🔌 SDK 集成
+
+### SDK 配置
+
+```javascript
+// JavaScript SDK
+Sentry.init({
+  dsn: 'https://your-key@your-domain.com/1',
+});
 ```
 
-## 访问地址
-
-- **Web 应用**: http://localhost:8000
-- **健康检查**: http://localhost:8000/_health/
-- **API 文档**: http://localhost:8000/api/
-- **管理后台**: http://localhost:8000/admin/
-
-### 数据库连接
-
-```bash
-# PostgreSQL
-Host: localhost
-Port: 5432
-Database: postgres
-Username: postgres
-Password: postgres
-
-# Redis
-Host: localhost
-Port: 6379
+```python
+# Python SDK
+import sentry_sdk
+sentry_sdk.init(
+    dsn="https://your-key@your-domain.com/1",
+)
 ```
 
-## 监控和日志
+### 重要说明
 
-### 实时监控
+SDK 集成**不受** `ALLOWED_HOSTS` 和 `CSRF_TRUSTED_ORIGINS` 限制，可以安全使用。
 
-```bash
-# 查看容器状态
-just status
-
-# 查看资源使用
-docker stats glitchtip-aio
-
-# 查看进程状态
-docker exec glitchtip-aio supervisorctl status
-```
-
-### 日志管理
-
-```bash
-# 查看所有日志
-just logs
-
-# 查看特定服务日志
-just logs-app       # Django 应用
-just logs-celery    # Celery 工作进程
-just logs-pgsql     # PostgreSQL
-just logs-redis     # Redis
-
-# 查看最近的错误
-docker logs --tail 100 glitchtip-aio | grep ERROR
-```
-
-## 开发和维护
-
-### 数据库操作
-
-```bash
-# 进入数据库
-just psql
-
-# 备份数据库
-just backup
-
-# 恢复数据库
-just restore
-
-# 运行迁移
-just migrate
-
-# 手动备份
-docker exec glitchtip-aio pg_dump -U postgres > backup.sql
-
-# 手动恢复
-docker exec -i glitchtip-aio psql -U postgres < backup.sql
-```
-
-### Redis 操作
-
-```bash
-# 进入 Redis CLI
-just redis
-
-# 查看键值
-docker exec glitchtip-aio redis-cli KEYS "*"
-
-# 清空缓存
-docker exec glitchtip-aio redis-cli FLUSHALL
-
-# 查看信息
-docker exec glitchtip-aio redis-cli INFO
-```
-
-### 容器管理
-
-```bash
-# 进入容器 shell
-just shell
-
-# 运行 Django 命令
-just django <command>
-
-# 重新构建镜像
-just rebuild
-
-# 清理容器和镜像
-just clean
-```
-
-## 性能优化建议
-
-### 系统配置
-
-```bash
-# 增加文件描述符限制
-ulimit -n 65536
-
-# 优化内核参数
-echo 'net.core.somaxconn = 65535' >> /etc/sysctl.conf
-echo 'net.ipv4.tcp_max_syn_backlog = 65535' >> /etc/sysctl.conf
-sysctl -p
-```
-
-### Docker 配置
-
-```bash
-# 限制内存使用
-docker run -m 2g --memory-swap 3g ...
-
-# 限制 CPU 使用
-docker run --cpus=2.0 ...
-
-# 添加健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3
-```
-
-## 版本更新
-
-### 更新到最新版本
-
-```bash
-# 重新构建镜像
-just rebuild
-
-# 手动更新
-docker pull glitchtip/glitchtip:v5.1
-just rebuild
-```
-
-### 版本回滚
-
-```bash
-# 查看可用版本
-docker images glitchtip/glitchtip
-
-# 使用特定版本
-docker run ... glitchtip/glitchtip:v5.0
-```
-
-## 数据持久化
-
-### 自动数据持久化
-
-默认情况下，所有部署都会自动创建数据目录并进行卷挂载：
-
-```bash
-# 部署时自动创建的数据结构
-data/
-├── postgres/data/    # PostgreSQL 数据
-├── redis/data/       # Redis 数据
-├── backups/          # 备份文件
-├── logs/             # 日志文件
-└── uploads/          # 上传文件
-```
-
-### 数据库迁移管理
-
-```bash
-# 运行数据库迁移
-just migrate
-
-# 查看迁移状态
-just django showmigrations
-
-# 创建迁移文件
-just django makemigrations
-
-# 回滚迁移
-just django migrate <app_name> <migration_name>
-```
-
-### 备份和恢复
-
-```bash
-# 创建备份
-just backup
-
-# 恢复备份
-just restore
-
-# 手动备份
-docker exec glitchtip-aio pg_dump -U postgres | gzip > backup-$(date +%Y%m%d).sql.gz
-
-# 手动恢复
-gunzip -c backup-20231201.sql.gz | docker exec -i glitchtip-aio psql -U postgres
-```
-
-### 系统信息查看
-
-```bash
-# 查看容器状态
-just status
-
-# 查看容器资源使用
-docker stats glitchtip-aio
-
-# 查看进程状态
-docker exec glitchtip-aio supervisorctl status
-```
-
-## 注意事项
-
-### 安全性
-
-1. **生产环境**: 修改默认密码和密钥
-2. **HTTPS**: 配置 SSL 证书
-3. **防火墙**: 限制端口访问
-4. **备份**: 定期备份数据
-
-### 数据持久化
-
-1. **数据库**: 使用卷挂载持久化数据
-2. **文件上传**: 配置外部存储
-3. **日志**: 配置日志轮转
-
-### 监控告警
-
-1. **健康检查**: 监控服务状态
-2. **资源使用**: 监控 CPU、内存、磁盘
-3. **错误日志**: 设置错误告警
-
-## 故障排除
+## 🐛 故障排除
 
 ### 常见问题
 
-1. **端口冲突**
+1. **Origin 检查失败**
    ```bash
-   # 检查端口占用
-   netstat -tulpn | grep :8000
-   # 使用其他端口
-   just deploy-port 8080
+   # 检查 ALLOWED_HOSTS 和 CSRF_TRUSTED_ORIGINS 配置
+   ./manage-config.sh show
    ```
 
-2. **镜像拉取失败**
+2. **数据库连接问题**
    ```bash
-   # 配置 Docker 镜像加速
-   sudo mkdir -p /etc/docker
-   sudo tee /etc/docker/daemon.json <<-'EOF'
-   {
-     "registry-mirrors": ["https://mirrors.aliyun.com"]
-   }
-   EOF
-   sudo systemctl restart docker
+   # 检查数据库服务状态
+   just logs-pgsql
    ```
 
-3. **内存不足**
+3. **容器启动失败**
    ```bash
-   # 检查内存使用
-   free -h
-   # 增加交换空间
-   sudo fallocate -l 2G /swapfile
-   sudo chmod 600 /swapfile
-   sudo mkswap /swapfile
-   sudo swapon /swapfile
+   # 查看详细日志
+   docker logs glitchtip-aio
    ```
 
-4. **服务启动缓慢**
-   ```bash
-   # 查看启动日志
-   just logs
-   # 检查资源使用
-   docker stats glitchtip-aio
-   ```
-
-5. **Just 命令不可用**
-   ```bash
-   # 安装 Just
-   curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
-   # 或使用包管理器
-   # Ubuntu/Debian: sudo apt install just
-   # macOS: brew install just
-   ```
-
-### 调试技巧
+### 测试脚本
 
 ```bash
-# 查看容器内部进程
-docker top glitchtip-aio
+# 运行集成测试
+./test-sdk-integration.sh
 
-# 查看容器配置
-docker inspect glitchtip-aio
-
-# 进入调试模式
-just shell
-
-# 查看网络连接
-docker exec glitchtip-aio netstat -tulpn
-
-# 查看所有可用命令
-just --list
+# 测试配置文件
+./manage-config.sh test
 ```
 
-## 性能对比
+## 📁 项目文件结构
 
-| 指标 | 原版 Compose | 优化版单容器 |
-|------|-------------|-------------|
-| 启动时间 | 2-3 分钟 | 1-2 分钟 |
-| 镜像大小 | ~2GB | ~1.5GB |
-| 内存使用 | ~1GB | ~800MB |
-| 部署复杂度 | 高 | 低 |
-| 网络开销 | 多容器通信 | 单容器内部 |
-| 维护难度 | 中等 | 简单 |
+```
+glitchtip-aio/
+├── .env                    # 环境配置文件（运行时生成）
+├── .env.example           # 配置模板
+├── .env.production        # 生产环境配置示例
+├── .env.development       # 开发环境配置示例
+├── Dockerfile             # 容器定义
+├── justfile              # Just 命令配置
+├── manage-config.sh       # 配置管理脚本
+├── quick-deploy.sh       # 快速部署脚本
+├── test-sdk-integration.sh # SDK 集成测试脚本
+├── conf/
+│   ├── bin/              # 服务脚本
+│   ├── supervisor/       # Supervisor 配置
+│   └── etc/              # 配置文件
+├── data/                 # 数据目录（可选）
+└── README.md             # 项目文档
+```
 
-## 贡献
+## 📚 相关文档
+
+- [Glitchtip 官方文档](https://glitchtip.com/documentation/)
+- [Docker 安全最佳实践](https://docs.docker.com/engine/security/)
+- [Django 部署清单](https://docs.djangoproject.com/en/stable/howto/deployment/checklist/)
+
+## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-## 许可证
+## 📄 许可证
 
-本项目遵循与原 Glitchtip 项目相同的许可证。
-
----
-
-**提示**: 
-- 使用 `just deploy` 进行快速部署
-- 所有管理命令都通过 `just` 运行，使用 `just --list` 查看所有可用命令
-- 支持环境变量配置，如 `PERSIST_DATA=true just deploy-persist`
-- 数据持久化模式适合生产环境和需要长期使用的场景
-- 需要先安装 Just 命令运行器
+本项目遵循 MIT 许可证。
