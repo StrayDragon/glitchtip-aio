@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import sys
-import subprocess
+import os
 import logging
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,8 +14,43 @@ def handle_event(event_data):
     try:
         logger.info(f"Received event: {event_data}")
 
-        if 'PROCESS_STATE_FATAL' in event_data or 'PROCESS_STATE_EXITED' in event_data:
-            logger.warning("Process monitoring event received")
+        # Parse event data
+        event_info = {}
+        for item in event_data.split():
+            if ':' in item:
+                key, value = item.split(':', 1)
+                event_info[key] = value
+
+        process_name = event_info.get('processname', '')
+        event_type = event_info.get('eventname', '')
+
+        logger.info(f"Process: {process_name}, Event: {event_type}")
+
+        # If migrate process exits with non-zero code, stop the container
+        if process_name == 'migrate' and event_type == 'PROCESS_STATE_EXITED':
+            # Parse exit code
+            expected_code = event_info.get('expected', '')
+            actual_code = event_info.get('from_state', '')
+
+            logger.warning(f"Migration process exited. Expected: {expected_code}, From: {actual_code}")
+
+            # Check if this is an unexpected exit (not exit code 0)
+            if actual_code != 'STOPPED':
+                logger.error("Migration failed unexpectedly. Shutting down container...")
+                time.sleep(2)  # Give some time for logs to be written
+                os._exit(1)
+
+        # If PostgreSQL or Redis fails fatally, stop the container
+        if process_name in ['postgres', 'redis'] and event_type == 'PROCESS_STATE_FATAL':
+            logger.error(f"Critical process {process_name} failed fatally. Shutting down container...")
+            time.sleep(2)
+            os._exit(1)
+
+        if process_name in ['postgres', 'redis'] and event_type == 'PROCESS_STATE_EXITED':
+            if event_info.get('from_state') not in ['STOPPED', 'STOPPING']:
+                logger.error(f"Critical process {process_name} exited unexpectedly. Shutting down container...")
+                time.sleep(2)
+                os._exit(1)
 
     except Exception as e:
         logger.error(f"Error handling event: {e}")

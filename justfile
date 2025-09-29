@@ -7,8 +7,8 @@ default:
 # =============================================================================
 
 # 容器配置
-export CONTAINER_NAME := "glitchtip-aio"
 export IMAGE_NAME := "glitchtip-aio"
+export CONTAINER_NAME := "glitchtip-aio-test"
 export DATA_DIR := "./data"
 export BACKUP_DIR := DATA_DIR + "/backups"
 
@@ -19,6 +19,26 @@ export DEFAULT_DOMAIN := "http://localhost:8000"
 # =============================================================================
 # 容器生命周期管理
 # =============================================================================
+
+deploy-test:
+    docker run --rm -d \
+      -e SECRET_KEY="$(openssl rand -hex 32)" \
+      -e EMAIL_URL="consolemail://" \
+      -e DEFAULT_FROM_EMAIL="glitchtip@localhost" \
+      -e GLITCHTIP_DOMAIN="http://localhost:8000" \
+      -e DEBUG="true" \
+      -e ENABLE_USER_REGISTRATION="true" \
+      -e ENABLE_ORGANIZATION_CREATION="true" \
+      -e DB_PASSWORD="postgres" \
+      -e DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
+      -e REDIS_URL="redis://localhost:6379/0" \
+      -e CELERY_BROKER_URL="redis://localhost:6379/0" \
+      -e CELERY_RESULT_BACKEND="redis://localhost:6379/0" \
+      -e ALLOWED_HOSTS="localhost,127.0.0.1" \
+      -e CSRF_TRUSTED_ORIGINS="http://localhost:8000" \
+      -p 8000:8000 \
+      --name {{CONTAINER_NAME}} \
+      glitchtip-aio:latest
 
 # 查看完整日志
 logs:

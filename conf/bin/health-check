@@ -6,7 +6,7 @@ if nc -z localhost 5432; then
     echo "✓ PostgreSQL is running"
 
     # 检查PostgreSQL连接
-    if timeout 5 psql -U postgres -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+    if timeout 5 psql "${DATABASE_URL:-postgres://postgres:${DB_PASSWORD:-postgres}@localhost:5432/postgres}" -c "SELECT 1;" > /dev/null 2>&1; then
         echo "✓ PostgreSQL connection is working"
     else
         echo "✗ PostgreSQL connection failed"
