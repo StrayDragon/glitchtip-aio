@@ -27,10 +27,6 @@ export PYTHONUNBUFFERED=1
 echo "Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
-# 优化Django设置
-export DEBUG=false
-export ALLOWED_HOSTS='*'
-
 echo "Starting Gunicorn production server..."
 exec gunicorn glitchtip.wsgi:application \
     --bind 0.0.0.0:8000 \

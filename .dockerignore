@@ -154,3 +154,6 @@ uploads/
 # Temporary upload files
 tmp/
 temp/
+
+# User custom
+*justfile

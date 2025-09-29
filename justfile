@@ -1,3 +1,5 @@
+import? "my.justfile"
+
 # 默认命令 - 显示可用命令列表
 default:
     @just --list
@@ -23,19 +25,17 @@ export DEFAULT_DOMAIN := "http://localhost:8000"
 deploy-test:
     docker run --rm -d \
       -e SECRET_KEY="$(openssl rand -hex 32)" \
+      -e GLITCHTIP_DOMAIN="http://localhost:8000" \
       -e EMAIL_URL="consolemail://" \
       -e DEFAULT_FROM_EMAIL="glitchtip@localhost" \
-      -e GLITCHTIP_DOMAIN="http://localhost:8000" \
       -e DEBUG="true" \
-      -e ENABLE_USER_REGISTRATION="true" \
-      -e ENABLE_ORGANIZATION_CREATION="true" \
-      -e DB_PASSWORD="postgres" \
-      -e DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
-      -e REDIS_URL="redis://localhost:6379/0" \
-      -e CELERY_BROKER_URL="redis://localhost:6379/0" \
-      -e CELERY_RESULT_BACKEND="redis://localhost:6379/0" \
+      -e ENABLE_USER_REGISTRATION=false \
+      -e ENABLE_ORGANIZATION_CREATION=false \
+      -e DB_PASSWORD="$(openssl rand -hex 16)" \
+      -e GLITCHTIP_MAX_EVENT_LIFE_DAYS=7 \
+      -e GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS=7 \
+      -e GLITCHTIP_MAX_FILE_LIFE_DAYS=7 \
       -e ALLOWED_HOSTS="localhost,127.0.0.1" \
-      -e CSRF_TRUSTED_ORIGINS="http://localhost:8000" \
       -p 8000:8000 \
       --name {{CONTAINER_NAME}} \
       glitchtip-aio:latest
@@ -72,12 +72,15 @@ logs-redis:
 logs-migrate:
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/migrate.log
 
-# 查看错误日志
-logs-errors:
+# 查看错误日志(web)
+logs-web-errors:
     #!/usr/bin/env bash
     echo "=== Web错误日志 ==="
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/web.err.log
-    echo ""
+
+# 查看错误日志
+logs-celery-errors:
+    #!/usr/bin/env bash
     echo "=== Celery错误日志 ==="
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/celery.err.log
 

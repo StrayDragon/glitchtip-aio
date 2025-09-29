@@ -63,12 +63,12 @@ Based on `.env.example`:
 CONTAINER_NAME=glitchtip-aio
 IMAGE_NAME=glitchtip-aio
 DATA_DIR=./data
-DEFAULT_PORT=8004
-DEFAULT_DOMAIN=http://localhost:8004
+DEFAULT_PORT=8000
+DEFAULT_DOMAIN=http://localhost:8000
 
 # Django security configuration
 ALLOWED_HOSTS=localhost,127.0.0.1
-CSRF_TRUSTED_ORIGINS=http://localhost:8004
+CSRF_TRUSTED_ORIGINS=http://localhost:8000
 SECRET_KEY=                    # Generate unique key for production
 DEBUG=false
 ENABLE_USER_REGISTRATION=false
@@ -182,7 +182,7 @@ just run-migrate             # Run Django migrations
 ```bash
 docker ps | grep glitchtip    # Check container status
 docker inspect <container> | grep Health  # Check health status
-curl http://localhost:8004/_health/  # Test health endpoint
+curl http://localhost:8000/_health/  # Test health endpoint
 just logs-app                # Monitor Django application
 just logs-celery             # Monitor Celery worker
 just logs-pgsql              # Monitor PostgreSQL

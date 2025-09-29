@@ -2,8 +2,8 @@
 
 # 设置默认环境变量
 export SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
-export PORT="${PORT:-8004}"
-export GLITCHTIP_DOMAIN="${GLITCHTIP_DOMAIN:-http://localhost:8004}"
+export PORT="${PORT:-8000}"
+export GLITCHTIP_DOMAIN="${GLITCHTIP_DOMAIN:-http://localhost:8000}"
 export DEFAULT_FROM_EMAIL="${DEFAULT_FROM_EMAIL:-glitchtip@localhost}"
 export DEBUG="${DEBUG:-false}"
 export DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 16)}"
@@ -14,8 +14,22 @@ export CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-redis://localhost:6379/0}
 export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 export EMAIL_URL="${EMAIL_URL:-}"
 
-# Django 安全配置 - 设置默认可信域名
-export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1}"
+# Django 安全配置 - 智能设置允许的主机
+if [ -n "$ALLOWED_HOSTS" ]; then
+    echo "使用用户指定的 ALLOWED_HOSTS: $ALLOWED_HOSTS"
+else
+    # 从 GLITCHTIP_DOMAIN 提取主机名
+    DOMAIN_HOST=$(echo "$GLITCHTIP_DOMAIN" | sed 's|https\?://||' | sed 's|:[0-9]*||' | sed 's|/.*||')
+    if [ "$DOMAIN_HOST" != "localhost" ] && [ "$DOMAIN_HOST" != "127.0.0.1" ]; then
+        export ALLOWED_HOSTS="localhost,127.0.0.1,$DOMAIN_HOST"
+        echo "自动推导 ALLOWED_HOSTS: $ALLOWED_HOSTS"
+    else
+        export ALLOWED_HOSTS="localhost,127.0.0.1"
+        echo "使用默认 ALLOWED_HOSTS: $ALLOWED_HOSTS"
+    fi
+fi
+
+# 设置 CSRF 可信来源
 export CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-${GLITCHTIP_DOMAIN}}"
 
 # 用户和组织管理配置 - 支持环境变量覆盖
