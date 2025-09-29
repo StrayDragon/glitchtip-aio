@@ -25,36 +25,55 @@ Single-container with Supervisor managing services in priority order:
 
 ```bash
 # Deployment
-just deploy                    # Deploy on port 8000
-just deploy-port 8080          # Deploy on custom port
-just deploy-persist            # Deploy with data persistence
+just deploy-test               # Deploy container for testing
+just build                     # Rebuild Docker image
+just clean                     # Clean containers and images
 
-# Container management
-just start/stop/restart        # Container lifecycle
-just status                    # Check service health
-just logs                      # View all logs
-just logs-app/celery/pgsql/redis # View specific service logs
+# Container monitoring
+just logs                      # View container logs
+just logs-supervisor           # View supervisor logs
+just logs-app                  # View application logs
+just logs-celery               # View Celery logs
+just logs-pgsql                # View PostgreSQL logs
+just logs-redis                # View Redis logs
+just logs-migrate              # View migration logs
+just logs-errors               # View error logs only
 
 # Database operations
-just backup/restore            # Backup/restore database
-just migrate                   # Run Django migrations
-just psql/redis                # Enter database shell
+just backup                    # Backup database
+just restore                   # Restore database
+just run-migrate               # Run Django migrations
 
 # Container interaction
-just shell                     # Enter container shell
-just django <command>          # Run Django commands
-just rebuild                   # Rebuild Docker image
-just clean                     # Clean containers and images
+just it-shell                  # Enter container shell
+just it-shell-psql             # Enter PostgreSQL shell
+just it-shell-redis            # Enter Redis CLI
+just it-django-mange <command> # Run Django commands
+
+# Project management
+just package-to-zip            # Package project to ZIP
 ```
 
 ### Key Environment Variables
 
+Based on `.env.example`:
+
 ```bash
-# Core configuration
-SECRET_KEY=your-secret-key     # Generate unique key for production
-PORT=8000                      # Web application port
-GLITCHTIP_DOMAIN=http://localhost:8000
+# Container configuration
+CONTAINER_NAME=glitchtip-aio
+IMAGE_NAME=glitchtip-aio
+DATA_DIR=./data
+DEFAULT_PORT=8004
+DEFAULT_DOMAIN=http://localhost:8004
+
+# Django security configuration
+ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost:8004
+SECRET_KEY=                    # Generate unique key for production
 DEBUG=false
+ENABLE_USER_REGISTRATION=false
+ENABLE_ORGANIZATION_CREATION=false
+DEFAULT_FROM_EMAIL=glitchtip@localhost
 
 # Data persistence
 PERSIST_DATA=false             # Enable persistent volumes
@@ -62,15 +81,16 @@ EXPOSE_WEB_PORT=true           # Expose web port to host
 EXPOSE_DB_PORT=false          # Expose database port to host
 EXPOSE_REDIS_PORT=false       # Expose Redis port to host
 
-# Database (default: postgres:postgres)
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
+# Security
+DB_PASSWORD=                  # Database password (generate for production)
+REDIS_PASSWORD=              # Redis password (optional)
+DATABASE_POOL=false          # Connection pooling
 
 # Email configuration
-DEFAULT_FROM_EMAIL=glitchtip@localhost
 EMAIL_URL=consolemail://
+
+# Performance
+MAX_UPLOAD_SIZE=10485760      # 10MB
 ```
 
 **Data Persistence** (when `PERSIST_DATA=true`):
@@ -85,27 +105,31 @@ EMAIL_URL=consolemail://
 ### Container Structure
 - **Base Image**: `glitchtip/glitchtip:v5.1` with PostgreSQL 17, Redis 7.x
 - **Package Sources**: Aliyun mirrors for Chinese access optimization
-- **Health Check**: Available at `/_health/` endpoint
-- **Service Scripts**: Embedded in Dockerfile for each service
+- **Health Check**: Available at `/_health/` endpoint with 30s intervals, 10s timeout
+- **Security**: PostgreSQL restricted to localhost only, SCRAM-SHA-256 authentication
+- **User Management**: Dedicated `glitchtip` user with proper permissions
 
 ### Service Management
-Services are managed by Supervisor in priority order:
-- `start-postgres.sh` - PostgreSQL initialization and startup
-- `start-redis.sh` - Redis configuration and startup
-- `start-web.sh` - Django web application
-- `start-celery.sh` - Celery background worker
+Services are managed by Supervisor in priority order with dedicated log files:
+- PostgreSQL - Database service (localhost only)
+- Redis - Caching and message broker
+- Gunicorn - Web application server
+- Celery - Background task processor
+- Supervisor - Process management system
 
 ### Build System
-- **Dockerfile**: Single-container image with all services
-- **Just Commands**: Comprehensive task automation in `justfile`
+- **Dockerfile**: Single-container image with embedded service scripts from `conf/`
+- **Just Commands**: Comprehensive task automation with detailed logging
+- **Environment Configuration**: `.env` file based on `.env.example`
 - **No Traditional Build**: This is a deployment project, not a codebase
 
 ### Key Files
 - `Dockerfile` - Container image definition with embedded service scripts
 - `justfile` - Command runner configuration with comprehensive task automation
-- `.env.example` - Environment variable template
-- `README.md` - Comprehensive documentation (Chinese)
-- `.gitmodules` - Git submodule configuration for source code
+- `.env.example` - Detailed environment variable template with security configurations
+- `README.md` - Comprehensive documentation in Chinese with deployment guides
+- `LICENSE` - MIT license
+- `conf/` - Service configuration scripts (managed as git submodules)
 
 **No Testing/Linting**: This project has no traditional test suite or linting commands. Quality assurance comes from Docker health checks and service monitoring.
 
@@ -113,38 +137,52 @@ Services are managed by Supervisor in priority order:
 
 ### Quick Start
 ```bash
-just deploy                    # Start on port 8000
-just logs-app                  # Monitor application
-just status                    # Check health
+just deploy-test             # Deploy container for testing
+just logs-app                # Monitor application
+docker ps | grep glitchtip    # Check container status
 ```
 
 ### Production Deployment
-```bash
-PERSIST_DATA=true just deploy-persist  # Persistent data
-just backup                          # Backup database
-just rebuild && just deploy-persist   # Update deployment
-```
+1. **Prepare environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with production settings
+   PERSIST_DATA=true
+   EXPOSE_DB_PORT=false
+   EXPOSE_REDIS_PORT=false
+   SECRET_KEY=$(openssl rand -hex 32)
+   DB_PASSWORD=$(openssl rand -hex 32)
+   ```
+
+2. **Deploy and manage**:
+   ```bash
+   just build                 # Rebuild with production settings
+   docker run -d --env-file .env ...  # Deploy container
+   just backup               # Backup database regularly
+   ```
 
 ### Development and Debugging
 ```bash
-just shell                   # Access container shell
-just django <command>        # Run Django commands
+just it-shell                # Access container shell
+just it-django-mange <cmd>   # Run Django commands
 just logs-supervisor         # View supervisor logs
 just logs-errors             # View error logs only
 ```
 
 ### Database Operations
 ```bash
-just psql                    # Enter PostgreSQL shell
-just redis                   # Enter Redis CLI
+just it-shell-psql           # Enter PostgreSQL shell
+just it-shell-redis          # Enter Redis CLI
 just backup                  # Create database backup
 just restore                 # Restore from backup
-just migrate                 # Run Django migrations
+just run-migrate             # Run Django migrations
 ```
 
 ### Service Monitoring
 ```bash
-just status                  # Check all service status
+docker ps | grep glitchtip    # Check container status
+docker inspect <container> | grep Health  # Check health status
+curl http://localhost:8004/_health/  # Test health endpoint
 just logs-app                # Monitor Django application
 just logs-celery             # Monitor Celery worker
 just logs-pgsql              # Monitor PostgreSQL
@@ -163,18 +201,21 @@ These are reference-only for deployment purposes - modifications should be made 
 ## Security and Production Notes
 
 ### Security Configuration
-- Default PostgreSQL credentials: `postgres:postgres` (change for production)
-- Generate unique `SECRET_KEY` for production deployments
-- Use HTTPS and SSL certificates in production
-- Configure firewall rules to limit port access
-- Enable database authentication in production
+- **Database Security**: PostgreSQL restricted to localhost only with SCRAM-SHA-256 authentication
+- **Password Management**: Generate strong `DB_PASSWORD` and `SECRET_KEY` for production
+- **Port Security**: Only expose web port (8000) externally, keep DB/Redis internal
+- **Host Validation**: Configure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` properly
+- **User Controls**: Disable `ENABLE_USER_REGISTRATION` and `ENABLE_ORGANIZATION_CREATION` in production
+- **HTTPS**: Use SSL certificates and reverse proxy for production deployments
 
 ### Production Optimizations
-- Enable data persistence: `PERSIST_DATA=true`
-- Configure resource limits: `docker run -m 2g --cpus=2.0`
-- Set up monitoring and alerting
-- Configure log rotation and backup schedules
-- Use reverse proxy (Nginx/Apache) for SSL termination
+- **Data Persistence**: Enable `PERSIST_DATA=true` for data survival across container restarts
+- **Resource Limits**: Configure `docker run -m 2g --cpus=2.0` for resource constraints
+- **Backup Strategy**: Implement regular backups using `just backup` with cron scheduling
+- **Monitoring**: Set up health check monitoring and alerting
+- **Log Management**: Configure log rotation and centralized logging
+- **Reverse Proxy**: Use Nginx/Apache for SSL termination and load balancing
+- **Network Security**: Implement firewall rules and private networks
 
 ## Architecture Benefits
 
