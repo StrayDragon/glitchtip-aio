@@ -39,6 +39,9 @@ export ENABLE_ORGANIZATION_CREATION="${ENABLE_ORGANIZATION_CREATION:-false}"
 # 数据库连接池配置 - 禁用连接池以避免连接问题
 export DATABASE_POOL="false"
 
+# 数据库主机配置 - 确保使用 localhost 而不是 postgres
+export DB_HOST="localhost"
+
 # 创建 .env 文件
 cat > /code/.env << ENV_EOF
 SECRET_KEY=${SECRET_KEY}
@@ -65,6 +68,9 @@ CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
 # 用户和组织管理配置
 ENABLE_USER_REGISTRATION=${ENABLE_USER_REGISTRATION}
 ENABLE_ORGANIZATION_CREATION=${ENABLE_ORGANIZATION_CREATION}
+
+# 数据库连接配置
+DB_HOST=${DB_HOST}
 ENV_EOF
 
 echo "=== Glitchtip AIO Container Starting ==="
@@ -72,9 +78,10 @@ echo "Configuration:"
 echo "   Domain: ${GLITCHTIP_DOMAIN}"
 echo "   Port: ${PORT}"
 echo "   Debug: ${DEBUG}"
-echo "   Database: PostgreSQL 17"
+echo "   Database: PostgreSQL 17 (Host: ${DB_HOST})"
 echo "   Cache: Redis"
 echo "   Supervisor: Enhanced Configuration"
+echo "   Connection Pool: ${DATABASE_POOL}"
 echo "========================================"
 
 # 创建必要的目录和文件
