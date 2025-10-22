@@ -119,7 +119,7 @@ run-migrate:
 
 # 手动执行定时重启脚本（测试用）
 run-scheduled-restart:
-    docker exec {{CONTAINER_NAME}} /code/bin/scheduled-restart.sh
+    docker exec {{CONTAINER_NAME}} /code/bin/scheduled-restart.py
 
 # =============================================================================
 # 容器交互

@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Gunicorn
-RUN pip install gunicorn
+# 安装 Python 依赖包
+RUN pip install gunicorn psutil psycopg2-binary requests redis
 
 # 创建必要的目录
 RUN mkdir -p /data/postgres /data/redis /var/log/supervisor /code/bin

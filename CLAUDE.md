@@ -102,6 +102,9 @@ EMAIL_URL=consolemail://
 
 # Performance
 MAX_UPLOAD_SIZE=10485760      # 10MB
+
+# Notification (Optional)
+FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL=  # Feishu webhook for restart notifications
 ```
 
 ### ET-Specific Configuration
@@ -142,10 +145,13 @@ Services are managed by Supervisor in priority order with dedicated log files:
 
 ### Scheduled Restart Features
 - **Schedule**: Every day at 3:01 AM (cron: `1 3 * * *`)
+- **Implementation**: Python-based with comprehensive health monitoring
 - **Health Checks**: PostgreSQL, Redis, Django application, Celery workers
 - **Smart Logic**: Only restarts web/celery if base services are healthy
-- **Monitoring**: Pre/post restart health verification
+- **Enhanced Monitoring**: Process PID tracking, restart timing, system resource usage
+- **Notifications**: Feishu webhook integration for restart reports (optional)
 - **Logging**: Comprehensive logs in `/var/log/supervisor/scheduled-restart.log`
+- **Detailed Information**: Memory/CPU/disk usage, network connections, load averages
 
 ### Build System
 - **Dockerfile**: Single-container image with embedded service scripts from `conf/`
