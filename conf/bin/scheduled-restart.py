@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 @dataclass
 class HealthCheckResult:
     """健康检查结果"""
+
     service: str
     status: bool
     message: str
@@ -36,9 +37,10 @@ class HealthCheckResult:
 @dataclass
 class SystemInfo:
     """系统信息"""
+
     memory_usage: float  # 百分比
-    disk_usage: float    # 百分比
-    cpu_usage: float     # 百分比
+    disk_usage: float  # 百分比
+    cpu_usage: float  # 百分比
     load_avg: List[float]
     network_connections: int
 
@@ -46,6 +48,7 @@ class SystemInfo:
 @dataclass
 class RestartInfo:
     """重启信息"""
+
     service: str
     old_pid: Optional[int]
     new_pid: Optional[int]
@@ -57,6 +60,7 @@ class RestartInfo:
 @dataclass
 class ExecutionReport:
     """执行报告"""
+
     timestamp: str
     duration: float
     health_checks: List[HealthCheckResult]
@@ -72,44 +76,47 @@ class ScheduledRestarter:
     def __init__(self):
         self.setup_logging()
         self.start_time = time.time()
-        self.webhook_url = os.getenv('FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL')
-        self.db_password = os.getenv('DB_PASSWORD', 'postgres')
+        self.webhook_url = os.getenv("FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL")
+        self.db_password = os.getenv("DB_PASSWORD", "postgres")
         self.log_messages = []
+        self.service_domain = os.environ.get("GLITCHTIP_DOMAIN", "<unknown_domain>")
 
     def setup_logging(self):
         """设置日志"""
         logging.basicConfig(
             level=logging.INFO,
-            format='[%(asctime)s] SCHEDULED-RESTART: %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
+            format="[%(asctime)s] SCHEDULED-RESTART: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
             handlers=[
-                logging.FileHandler('/var/log/supervisor/scheduled-restart.log'),
-                logging.StreamHandler(sys.stdout)
-            ]
+                logging.FileHandler("/var/log/supervisor/scheduled-restart.log"),
+                logging.StreamHandler(sys.stdout),
+            ],
         )
         self.logger = logging.getLogger(__name__)
 
-    def log(self, message: str, level: str = 'info'):
+    def log(self, message: str, level: str = "info"):
         """记录日志"""
-        if level == 'error':
+        if level == "error":
             self.logger.error(message)
-        elif level == 'warning':
+        elif level == "warning":
             self.logger.warning(message)
         else:
             self.logger.info(message)
-        self.log_messages.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+        self.log_messages.append(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}"
+        )
 
     def check_postgresql(self) -> HealthCheckResult:
         """检查PostgreSQL连接"""
         start_time = time.time()
         try:
             conn = psycopg2.connect(
-                host='localhost',
+                host="localhost",
                 port=5432,
-                user='postgres',
+                user="postgres",
                 password=self.db_password,
-                database='postgres',
-                connect_timeout=10
+                database="postgres",
+                connect_timeout=10,
             )
 
             cursor = conn.cursor()
@@ -125,67 +132,61 @@ class ScheduledRestarter:
 
             duration = time.time() - start_time
             details = {
-                'connection_count': connection_count,
-                'test_query_result': result
+                "connection_count": connection_count,
+                "test_query_result": result,
             }
 
             self.log("✓ PostgreSQL连接正常")
             return HealthCheckResult(
-                service='postgresql',
+                service="postgresql",
                 status=True,
-                message='PostgreSQL连接正常',
+                message="PostgreSQL连接正常",
                 duration=duration,
-                details=details
+                details=details,
             )
 
         except Exception as e:
             duration = time.time() - start_time
             error_msg = f"PostgreSQL连接失败: {str(e)}"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return HealthCheckResult(
-                service='postgresql',
-                status=False,
-                message=error_msg,
-                duration=duration
+                service="postgresql", status=False, message=error_msg, duration=duration
             )
 
     def check_redis(self) -> HealthCheckResult:
         """检查Redis连接"""
         start_time = time.time()
         try:
-            r = redis.Redis(host='localhost', port=6379, socket_timeout=10)
+            r = redis.Redis(host="localhost", port=6379, socket_timeout=10)
             pong = r.ping()
 
             # 获取Redis信息
             info = r.info()
-            memory_usage = info.get('used_memory', 0)
-            connected_clients = info.get('connected_clients', 0)
+            memory_usage = info.get("used_memory", 0)
+            connected_clients = info.get("connected_clients", 0)
 
             duration = time.time() - start_time
             details = {
-                'ping_result': pong,
-                'memory_usage': memory_usage,
-                'connected_clients': connected_clients
+                "ping_result": pong,
+                "memory_usage": memory_usage,
+                "connected_clients": connected_clients,
             }
 
             self.log("✓ Redis连接正常")
             return HealthCheckResult(
-                service='redis',
+                service="redis",
                 status=True,
-                message='Redis连接正常',
+                message="Redis连接正常",
                 duration=duration,
-                details=details
+                details=details,
             )
 
         except Exception as e:
             duration = time.time() - start_time
             error_msg = f"Redis连接失败: {str(e)}"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return HealthCheckResult(
-                service='redis',
-                status=False,
-                message=error_msg,
-                duration=duration
+                service="redis", status=False, message=error_msg, duration=duration
             )
 
     def check_django_health(self) -> HealthCheckResult:
@@ -193,44 +194,41 @@ class ScheduledRestarter:
         start_time = time.time()
         try:
             # 检查Django健康端点
-            response = requests.get('http://localhost:8000/_health/', timeout=10)
+            response = requests.get("http://localhost:8000/_health/", timeout=10)
 
             duration = time.time() - start_time
             details = {
-                'status_code': response.status_code,
-                'response_time': duration,
-                'content_length': len(response.content)
+                "status_code": response.status_code,
+                "response_time": duration,
+                "content_length": len(response.content),
             }
 
             if response.status_code == 200:
                 self.log("✓ Django应用健康检查通过")
                 return HealthCheckResult(
-                    service='django',
+                    service="django",
                     status=True,
-                    message='Django应用健康检查通过',
+                    message="Django应用健康检查通过",
                     duration=duration,
-                    details=details
+                    details=details,
                 )
             else:
                 error_msg = f"Django健康检查失败，状态码: {response.status_code}"
-                self.log(f"✗ {error_msg}", 'error')
+                self.log(f"✗ {error_msg}", "error")
                 return HealthCheckResult(
-                    service='django',
+                    service="django",
                     status=False,
                     message=error_msg,
                     duration=duration,
-                    details=details
+                    details=details,
                 )
 
         except Exception as e:
             duration = time.time() - start_time
             error_msg = f"Django健康检查失败: {str(e)}"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return HealthCheckResult(
-                service='django',
-                status=False,
-                message=error_msg,
-                duration=duration
+                service="django", status=False, message=error_msg, duration=duration
             )
 
     def check_celery_workers(self) -> HealthCheckResult:
@@ -239,19 +237,16 @@ class ScheduledRestarter:
         try:
             # 检查Celery进程是否运行
             celery_pids = []
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
                 try:
-                    cmdline = ' '.join(proc.info['cmdline'] or [])
-                    if 'celery' in cmdline and 'worker' in cmdline:
-                        celery_pids.append(proc.info['pid'])
+                    cmdline = " ".join(proc.info["cmdline"] or [])
+                    if "celery" in cmdline and "worker" in cmdline:
+                        celery_pids.append(proc.info["pid"])
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
 
             duration = time.time() - start_time
-            details = {
-                'worker_pids': celery_pids,
-                'worker_count': len(celery_pids)
-            }
+            details = {"worker_pids": celery_pids, "worker_count": len(celery_pids)}
 
             if len(celery_pids) > 0:
                 self.log(f"✓ Celery worker进程运行中 ({len(celery_pids)} 个进程)")
@@ -264,32 +259,29 @@ class ScheduledRestarter:
                     pass
 
                 return HealthCheckResult(
-                    service='celery',
+                    service="celery",
                     status=True,
-                    message=f'Celery worker进程运行中 ({len(celery_pids)} 个进程)',
+                    message=f"Celery worker进程运行中 ({len(celery_pids)} 个进程)",
                     duration=duration,
-                    details=details
+                    details=details,
                 )
             else:
                 error_msg = "Celery worker进程未运行"
-                self.log(f"✗ {error_msg}", 'error')
+                self.log(f"✗ {error_msg}", "error")
                 return HealthCheckResult(
-                    service='celery',
+                    service="celery",
                     status=False,
                     message=error_msg,
                     duration=duration,
-                    details=details
+                    details=details,
                 )
 
         except Exception as e:
             duration = time.time() - start_time
             error_msg = f"Celery worker检查失败: {str(e)}"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return HealthCheckResult(
-                service='celery',
-                status=False,
-                message=error_msg,
-                duration=duration
+                service="celery", status=False, message=error_msg, duration=duration
             )
 
     def get_system_info(self) -> SystemInfo:
@@ -300,7 +292,7 @@ class ScheduledRestarter:
             memory_usage = memory.percent
 
             # 磁盘使用率
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
             disk_usage = disk.percent
 
             # CPU使用率
@@ -312,24 +304,26 @@ class ScheduledRestarter:
             # 网络连接数
             network_connections = len(psutil.net_connections())
 
-            self.log(f"✓ 系统资源检查完成 - 内存: {memory_usage:.1f}%, 磁盘: {disk_usage:.1f}%, CPU: {cpu_usage:.1f}%")
+            self.log(
+                f"✓ 系统资源检查完成 - 内存: {memory_usage:.1f}%, 磁盘: {disk_usage:.1f}%, CPU: {cpu_usage:.1f}%"
+            )
 
             return SystemInfo(
                 memory_usage=memory_usage,
                 disk_usage=disk_usage,
                 cpu_usage=cpu_usage,
                 load_avg=load_avg,
-                network_connections=network_connections
+                network_connections=network_connections,
             )
 
         except Exception as e:
-            self.log(f"✗ 系统信息获取失败: {str(e)}", 'error')
+            self.log(f"✗ 系统信息获取失败: {str(e)}", "error")
             return SystemInfo(
                 memory_usage=0.0,
                 disk_usage=0.0,
                 cpu_usage=0.0,
                 load_avg=[0.0, 0.0, 0.0],
-                network_connections=0
+                network_connections=0,
             )
 
     def restart_service(self, service_name: str) -> RestartInfo:
@@ -339,19 +333,19 @@ class ScheduledRestarter:
         # 获取当前进程PID
         old_pid = None
         try:
-            if service_name == 'web':
+            if service_name == "web":
                 # web服务通常是gunicorn进程
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    cmdline = ' '.join(proc.info['cmdline'] or [])
-                    if 'gunicorn' in cmdline:
-                        old_pid = proc.info['pid']
+                for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                    cmdline = " ".join(proc.info["cmdline"] or [])
+                    if "gunicorn" in cmdline:
+                        old_pid = proc.info["pid"]
                         break
-            elif service_name == 'celery':
+            elif service_name == "celery":
                 # celery进程
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    cmdline = ' '.join(proc.info['cmdline'] or [])
-                    if 'celery' in cmdline and 'worker' in cmdline:
-                        old_pid = proc.info['pid']
+                for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                    cmdline = " ".join(proc.info["cmdline"] or [])
+                    if "celery" in cmdline and "worker" in cmdline:
+                        old_pid = proc.info["pid"]
                         break
         except:
             pass
@@ -361,10 +355,10 @@ class ScheduledRestarter:
 
             # 使用supervisorctl重启服务
             result = subprocess.run(
-                ['supervisorctl', 'restart', service_name],
+                ["supervisorctl", "restart", service_name],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
 
             restart_time = time.time() - start_time
@@ -376,17 +370,17 @@ class ScheduledRestarter:
                 # 获取新进程PID
                 new_pid = None
                 try:
-                    if service_name == 'web':
-                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                            cmdline = ' '.join(proc.info['cmdline'] or [])
-                            if 'gunicorn' in cmdline:
-                                new_pid = proc.info['pid']
+                    if service_name == "web":
+                        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                            cmdline = " ".join(proc.info["cmdline"] or [])
+                            if "gunicorn" in cmdline:
+                                new_pid = proc.info["pid"]
                                 break
-                    elif service_name == 'celery':
-                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                            cmdline = ' '.join(proc.info['cmdline'] or [])
-                            if 'celery' in cmdline and 'worker' in cmdline:
-                                new_pid = proc.info['pid']
+                    elif service_name == "celery":
+                        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                            cmdline = " ".join(proc.info["cmdline"] or [])
+                            if "celery" in cmdline and "worker" in cmdline:
+                                new_pid = proc.info["pid"]
                                 break
                 except:
                     pass
@@ -399,47 +393,47 @@ class ScheduledRestarter:
                     new_pid=new_pid,
                     restart_time=restart_time,
                     success=True,
-                    message=f"服务 {service_name} 重启成功"
+                    message=f"服务 {service_name} 重启成功",
                 )
             else:
                 error_msg = f"服务 {service_name} 重启失败: {result.stderr}"
-                self.log(f"✗ {error_msg}", 'error')
+                self.log(f"✗ {error_msg}", "error")
                 return RestartInfo(
                     service=service_name,
                     old_pid=old_pid,
                     new_pid=None,
                     restart_time=restart_time,
                     success=False,
-                    message=error_msg
+                    message=error_msg,
                 )
 
         except subprocess.TimeoutExpired:
             error_msg = f"服务 {service_name} 重启超时"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return RestartInfo(
                 service=service_name,
                 old_pid=old_pid,
                 new_pid=None,
                 restart_time=time.time() - start_time,
                 success=False,
-                message=error_msg
+                message=error_msg,
             )
         except Exception as e:
             error_msg = f"服务 {service_name} 重启异常: {str(e)}"
-            self.log(f"✗ {error_msg}", 'error')
+            self.log(f"✗ {error_msg}", "error")
             return RestartInfo(
                 service=service_name,
                 old_pid=old_pid,
                 new_pid=None,
                 restart_time=time.time() - start_time,
                 success=False,
-                message=error_msg
+                message=error_msg,
             )
 
     def send_feishu_notification(self, report: ExecutionReport):
         """发送飞书通知"""
         if not self.webhook_url:
-            self.log("未配置飞书webhook地址，跳过通知发送", 'warning')
+            self.log("未配置飞书webhook地址，跳过通知发送", "warning")
             return
 
         try:
@@ -449,11 +443,13 @@ class ScheduledRestarter:
 
             # 构建markdown内容
             markdown_content = f"""
+**环境**: {self.service_domain}
 **执行时间**: {report.timestamp}
 **总耗时**: {report.duration:.2f}秒
-**执行状态**: {'成功' if report.success else '失败'}
+**执行状态**: {"成功" if report.success else "失败"}
 
-### 🔍 健康检查结果
+---
+🔍 健康检查结果
 """
 
             for check in report.health_checks:
@@ -461,27 +457,32 @@ class ScheduledRestarter:
                 markdown_content += f"- {emoji} **{check.service.upper()}**: {check.message} ({check.duration:.2f}s)\n"
 
             markdown_content += f"""
-### 📊 系统资源信息
+---
+📊 系统资源信息
 - **内存使用率**: {report.system_info.memory_usage:.1f}%
 - **磁盘使用率**: {report.system_info.disk_usage:.1f}%
 - **CPU使用率**: {report.system_info.cpu_usage:.1f}%
-- **系统负载**: {', '.join(f'{x:.2f}' for x in report.system_info.load_avg)}
+- **系统负载**: {", ".join(f"{x:.2f}" for x in report.system_info.load_avg)}
 - **网络连接数**: {report.system_info.network_connections}
 
 """
 
             if report.restart_actions:
-                markdown_content += "### 🔄 重启操作\n"
+                markdown_content += "--- \n🔄 重启操作\n"
                 for restart in report.restart_actions:
                     emoji = "✅" if restart.success else "❌"
-                    pid_info = f"PID: {restart.old_pid} → {restart.new_pid}" if restart.old_pid and restart.new_pid else ""
+                    pid_info = (
+                        f"PID: {restart.old_pid} → {restart.new_pid}"
+                        if restart.old_pid and restart.new_pid
+                        else ""
+                    )
                     markdown_content += f"- {emoji} **{restart.service.upper()}**: {restart.message} ({restart.restart_time:.2f}s) {pid_info}\n"
                 markdown_content += "\n"
 
             # 添加最近的日志
             recent_logs = self.log_messages[-5:]  # 最近5条日志
             if recent_logs:
-                markdown_content += "### 📝 最近日志\n```\n"
+                markdown_content += "--- \n📝 最近日志\n```\n"
                 for log in recent_logs:
                     markdown_content += f"{log}\n"
                 markdown_content += "```\n"
@@ -491,25 +492,18 @@ class ScheduledRestarter:
                 "msg_type": "interactive",
                 "card": {
                     "schema": "2.0",
-                    "config": {
-                        "update_multi": True
-                    },
+                    "config": {"update_multi": True},
                     "header": {
                         "title": {
                             "tag": "plain_text",
-                            "content": f"{status_emoji} Glitchtip AIO 定时重启报告"
+                            "content": f"{status_emoji} Glitchtip AIO 定时重启报告",
                         },
-                        "template": status_color
+                        "template": status_color,
                     },
                     "body": {
-                        "elements": [
-                            {
-                                "tag": "markdown",
-                                "content": markdown_content
-                            }
-                        ]
-                    }
-                }
+                        "elements": [{"tag": "markdown", "content": markdown_content}]
+                    },
+                },
             }
 
             # 发送请求
@@ -517,16 +511,19 @@ class ScheduledRestarter:
                 self.webhook_url,
                 json=card_data,
                 timeout=30,
-                headers={'Content-Type': 'application/json'}
+                headers={"Content-Type": "application/json"},
             )
 
             if response.status_code == 200:
                 self.log("✓ 飞书通知发送成功")
             else:
-                self.log(f"✗ 飞书通知发送失败: {response.status_code} - {response.text}", 'error')
+                self.log(
+                    f"✗ 飞书通知发送失败: {response.status_code} - {response.text}",
+                    "error",
+                )
 
         except Exception as e:
-            self.log(f"✗ 飞书通知发送异常: {str(e)}", 'error')
+            self.log(f"✗ 飞书通知发送异常: {str(e)}", "error")
 
     def execute(self) -> ExecutionReport:
         """执行定时重启"""
@@ -544,23 +541,27 @@ class ScheduledRestarter:
             health_checks.append(self.check_redis())
 
             # 如果基础服务有问题，不重启应用层服务
-            base_service_issues = [check for check in health_checks[:2] if not check.status]
+            base_service_issues = [
+                check for check in health_checks[:2] if not check.status
+            ]
             if base_service_issues:
                 error_messages = [issue.message for issue in base_service_issues]
-                error_msg = f"检测到基础服务问题，跳过应用服务重启: {', '.join(error_messages)}"
-                self.log(error_msg, 'error')
+                error_msg = (
+                    f"检测到基础服务问题，跳过应用服务重启: {', '.join(error_messages)}"
+                )
+                self.log(error_msg, "error")
 
                 system_info = self.get_system_info()
                 duration = time.time() - self.start_time
 
                 report = ExecutionReport(
-                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     duration=duration,
                     health_checks=health_checks,
                     system_info=system_info,
                     restart_actions=[],
                     success=False,
-                    message=error_msg
+                    message=error_msg,
                 )
 
                 # 发送异常通知
@@ -587,13 +588,13 @@ class ScheduledRestarter:
                 self.log("开始执行服务重启...")
 
                 # 重启web服务
-                restart_actions.append(self.restart_service('web'))
+                restart_actions.append(self.restart_service("web"))
 
                 # 等待web服务完全启动
                 time.sleep(10)
 
                 # 重启celery服务
-                restart_actions.append(self.restart_service('celery'))
+                restart_actions.append(self.restart_service("celery"))
 
                 # 最终验证
                 self.log("执行重启后健康检查...")
@@ -603,23 +604,27 @@ class ScheduledRestarter:
                 final_celery = self.check_celery_workers()
 
                 all_services_ok = final_django.status and final_celery.status
-                success_message = "所有服务重启后运行正常" if all_services_ok else "重启后仍有服务异常，请检查日志"
+                success_message = (
+                    "所有服务重启后运行正常"
+                    if all_services_ok
+                    else "重启后仍有服务异常，请检查日志"
+                )
 
                 if not all_services_ok:
-                    self.log(success_message, 'error')
+                    self.log(success_message, "error")
                 else:
                     self.log(success_message)
 
                 duration = time.time() - self.start_time
 
                 report = ExecutionReport(
-                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     duration=duration,
                     health_checks=health_checks + [final_django, final_celery],
                     system_info=system_info,
                     restart_actions=restart_actions,
                     success=all_services_ok,
-                    message=success_message
+                    message=success_message,
                 )
 
                 # 发送重启通知
@@ -630,30 +635,30 @@ class ScheduledRestarter:
             else:
                 duration = time.time() - self.start_time
                 report = ExecutionReport(
-                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     duration=duration,
                     health_checks=health_checks,
                     system_info=system_info,
                     restart_actions=[],
                     success=True,
-                    message="所有服务正常，无需重启"
+                    message="所有服务正常，无需重启",
                 )
                 self.log("=== 定时重启检查完成 ===")
                 return report
 
         except Exception as e:
             error_msg = f"定时重启执行异常: {str(e)}"
-            self.log(error_msg, 'error')
+            self.log(error_msg, "error")
 
             duration = time.time() - self.start_time
             report = ExecutionReport(
-                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 duration=duration,
                 health_checks=health_checks,
                 system_info=self.get_system_info(),
                 restart_actions=restart_actions,
                 success=False,
-                message=error_msg
+                message=error_msg,
             )
 
             # 发送异常通知
@@ -670,5 +675,5 @@ def main():
     sys.exit(0 if report.success else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
