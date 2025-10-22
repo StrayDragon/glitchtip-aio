@@ -21,13 +21,18 @@ Single-container with Supervisor managing services in priority order:
 
 **This project uses Just (https://just.systems) as the command runner.**
 
+The justfile imports additional command modules:
+- `my.justfile` → `et.justfile` (ET-specific deployment commands)
+
 ### Essential Commands
 
 ```bash
 # Deployment
 just deploy-test               # Deploy container for testing
+just et-deploy-test            # ET-specific test deployment with custom domain
 just build                     # Rebuild Docker image
 just clean                     # Clean containers and images
+just et-push                   # Build and push to ET registry (overwrites latest)
 
 # Container monitoring
 just logs                      # View container logs
@@ -37,11 +42,12 @@ just logs-celery               # View Celery logs
 just logs-pgsql                # View PostgreSQL logs
 just logs-redis                # View Redis logs
 just logs-migrate              # View migration logs
-just logs-errors               # View error logs only
+just logs-web-errors           # View web error logs only
+just logs-celery-errors        # View Celery error logs only
 
 # Database operations
 just backup                    # Backup database
-just restore                   # Restore database
+just restore                   # Restore database (interactive)
 just run-migrate               # Run Django migrations
 
 # Container interaction
@@ -50,8 +56,13 @@ just it-shell-psql             # Enter PostgreSQL shell
 just it-shell-redis            # Enter Redis CLI
 just it-django-mange <command> # Run Django commands
 
+# Scheduled restart management
+just run-scheduled-restart     # Manually execute scheduled restart script (testing)
+just logs-scheduled-restart    # View scheduled restart logs
+just logs-scheduled-restart-errors # View scheduled restart error logs
+
 # Project management
-just package-to-zip            # Package project to ZIP
+just package-to-zip            # Package project to ZIP (excludes .gitignore files)
 ```
 
 ### Key Environment Variables
@@ -93,6 +104,17 @@ EMAIL_URL=consolemail://
 MAX_UPLOAD_SIZE=10485760      # 10MB
 ```
 
+### ET-Specific Configuration
+
+For ET deployments, additional environment variables are used:
+- **Domain**: `GLITCHTIP_DOMAIN=https://testglitchtip.easytransfer.cn`
+- **Extended Retention**:
+  - `GLITCHTIP_MAX_EVENT_LIFE_DAYS=90` (vs 7 days in test)
+  - `GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS=180`
+  - `GLITCHTIP_MAX_FILE_LIFE_DAYS=180`
+- **Host Validation**: `ALLOWED_HOSTS="testglitchtip.easytransfer.cn,.svc.cluster.local,.localhost,127.0.0.1,[::1]"`
+- **Registry**: `etservice-registry.cn-beijing.cr.aliyuncs.com/base/glitchtip-base:latest`
+
 **Data Persistence** (when `PERSIST_DATA=true`):
 - `/data/postgres/data` - PostgreSQL data
 - `/data/redis/data` - Redis data
@@ -115,12 +137,21 @@ Services are managed by Supervisor in priority order with dedicated log files:
 - Redis - Caching and message broker
 - Gunicorn - Web application server
 - Celery - Background task processor
+- Scheduled Restart - Automatic weekly maintenance (Monday 3:01 AM)
 - Supervisor - Process management system
+
+### Scheduled Restart Features
+- **Schedule**: Every Monday at 3:01 AM (cron: `1 3 * * 1`)
+- **Health Checks**: PostgreSQL, Redis, Django application, Celery workers
+- **Smart Logic**: Only restarts web/celery if base services are healthy
+- **Monitoring**: Pre/post restart health verification
+- **Logging**: Comprehensive logs in `/var/log/supervisor/scheduled-restart.log`
 
 ### Build System
 - **Dockerfile**: Single-container image with embedded service scripts from `conf/`
 - **Just Commands**: Comprehensive task automation with detailed logging
 - **Environment Configuration**: `.env` file based on `.env.example`
+- **Docker Build Context**: `.dockerignore` excludes source code, data, logs, and development files
 - **No Traditional Build**: This is a deployment project, not a codebase
 
 ### Key Files
