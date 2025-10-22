@@ -1,5 +1,5 @@
 #!/bin/bash
-# 定时重启脚本 - 每周一临晨3:01执行
+# 定时重启脚本 - 每天临晨3:01执行
 # 智能判断是否需要重启web和celery服务
 
 set -euo pipefail
@@ -190,7 +190,7 @@ main() {
         restart_needed=true
         log "检测到应用服务问题，将执行重启: ${app_issues[*]}"
     else
-        log "所有服务健康检查通过，执行预防性重启(每周例行维护)"
+        log "所有服务健康检查通过，执行预防性重启(每日例行维护)"
         restart_needed=true
     fi
 

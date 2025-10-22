@@ -137,11 +137,11 @@ Services are managed by Supervisor in priority order with dedicated log files:
 - Redis - Caching and message broker
 - Gunicorn - Web application server
 - Celery - Background task processor
-- Scheduled Restart - Automatic weekly maintenance (Monday 3:01 AM)
+- Scheduled Restart - Automatic daily maintenance (3:01 AM)
 - Supervisor - Process management system
 
 ### Scheduled Restart Features
-- **Schedule**: Every Monday at 3:01 AM (cron: `1 3 * * 1`)
+- **Schedule**: Every day at 3:01 AM (cron: `1 3 * * *`)
 - **Health Checks**: PostgreSQL, Redis, Django application, Celery workers
 - **Smart Logic**: Only restarts web/celery if base services are healthy
 - **Monitoring**: Pre/post restart health verification
