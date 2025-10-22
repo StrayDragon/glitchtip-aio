@@ -44,7 +44,7 @@ RUN mkdir -p /etc/postgresql && \
 
 # 复制配置文件
 COPY conf/bin/ /code/bin/
-COPY conf/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY conf/supervisor/ /etc/supervisor/conf.d/
 COPY conf/etc/entrypoint.sh /entrypoint.sh
 COPY conf/etc/pip.conf /etc/pip.conf
 

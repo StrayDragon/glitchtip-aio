@@ -78,11 +78,23 @@ logs-web-errors:
     echo "=== Web错误日志 ==="
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/web.err.log
 
-# 查看错误日志
+# 查看Celery错误日志
 logs-celery-errors:
     #!/usr/bin/env bash
     echo "=== Celery错误日志 ==="
     docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/celery.err.log
+
+# 查看定时重启日志
+logs-scheduled-restart:
+    #!/usr/bin/env bash
+    echo "=== 定时重启日志 ==="
+    docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/scheduled-restart.log
+
+# 查看定时重启错误日志
+logs-scheduled-restart-errors:
+    #!/usr/bin/env bash
+    echo "=== 定时重启错误日志 ==="
+    docker exec {{CONTAINER_NAME}} tail -f /var/log/supervisor/scheduled-restart.err.log
 
 # 备份数据库
 backup:
@@ -104,6 +116,10 @@ restore:
 # 运行数据库迁移
 run-migrate:
     docker exec {{CONTAINER_NAME}} python manage.py migrate --noinput
+
+# 手动执行定时重启脚本（测试用）
+run-scheduled-restart:
+    docker exec {{CONTAINER_NAME}} /code/bin/scheduled-restart.sh
 
 # =============================================================================
 # 容器交互
