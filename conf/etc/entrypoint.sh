@@ -108,6 +108,9 @@ fi
 chmod -R 755 /var/log/supervisor
 chmod -R 755 /code
 
+# 设置默认环境变量（避免supervisor报错）
+export FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL="${FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL:-}"
+
 # 设置进程限制
 ulimit -n 65536
 ulimit -u 32768
