@@ -297,6 +297,8 @@ class ConfigImporter:
         self.email_to_user = {}
         self.slug_to_org = {}
         self.slug_to_project = {}
+        self.id_to_org = {}
+        self.id_to_project = {}
 
     def log_error(self, message):
         """记录错误信息"""
@@ -386,6 +388,7 @@ class ConfigImporter:
 
                 if org:
                     self.slug_to_org[slug] = org
+                    self.id_to_org[org_data.get('id')] = org
                 self.import_stats['organizations'] += 1
 
             except Exception as e:
@@ -395,26 +398,35 @@ class ConfigImporter:
         for org_user_data in org_users_data:
             try:
                 user_email = org_user_data.pop('user_email', '')
-                org_slug = org_user_data.get('organization_id')  # 这里存储的是slug
+                org_id = org_user_data.get('organization')  # 这里存储的是原始ID
                 role = org_user_data.get('role', OrganizationUserRole.MEMBER)
 
-                if org_slug not in self.slug_to_org:
-                    self.log_error(f"组织不存在: {org_slug}")
+                # 先尝试通过ID查找组织，如果失败再尝试slug
+                org = None
+                if org_id and org_id in self.id_to_org:
+                    org = self.id_to_org[org_id]
+                else:
+                    # 如果找不到，尝试通过slug查找（兼容性）
+                    org_slug = org_user_data.get('organization_id')
+                    if org_slug and org_slug in self.slug_to_org:
+                        org = self.slug_to_org[org_slug]
+
+                if not org:
+                    self.log_error(f"组织不存在: {org_id}")
                     continue
 
                 if user_email not in self.email_to_user:
                     self.log_error(f"用户不存在: {user_email}")
                     continue
 
-                self.log_dry_run(f"Would add user {user_email} to organization {org_slug}")
+                self.log_dry_run(f"Would add user {user_email} to organization {org.name}")
 
                 if not self.dry_run:
-                    org = self.slug_to_org[org_slug]
                     user = self.email_to_user[user_email]
 
                     # 检查关系是否已存在
                     if OrganizationUser.objects.filter(user=user, organization=org).exists():
-                        self.log_info(f"用户 {user_email} 已在组织 {org_slug} 中")
+                        self.log_info(f"用户 {user_email} 已在组织 {org.name} 中")
                     else:
                         org_user = OrganizationUser.objects.create(
                             user=user,
@@ -422,7 +434,7 @@ class ConfigImporter:
                             role=role,
                             email=org_user_data.get('email', '')
                         )
-                        self.log_info(f"添加用户 {user_email} 到组织 {org_slug}")
+                        self.log_info(f"添加用户 {user_email} 到组织 {org.name}")
 
             except Exception as e:
                 self.log_error(f"导入组织用户关系失败: {str(e)}")
@@ -463,6 +475,7 @@ class ConfigImporter:
                         self.log_info(f"创建项目: {name} ({slug})")
 
                 self.slug_to_project[slug] = project
+                self.id_to_project[project_data.get('id')] = project
                 self.import_stats['projects'] += 1
 
             except Exception as e:
@@ -471,15 +484,24 @@ class ConfigImporter:
         # 然后导入项目密钥
         for key_data in project_keys_data:
             try:
-                project_slug = key_data.get('project_id')  # 这里存储的是slug
+                project_id = key_data.get('project')  # 这里存储的是原始ID
                 public_key = key_data.get('public_key')
 
-                project = self.slug_to_project.get(project_slug)
+                # 先尝试通过ID查找项目，如果失败再尝试slug
+                project = None
+                if project_id and project_id in self.id_to_project:
+                    project = self.id_to_project[project_id]
+                else:
+                    # 如果找不到，尝试通过slug查找（兼容性）
+                    project_slug = key_data.get('project_id')
+                    if project_slug and project_slug in self.slug_to_project:
+                        project = self.slug_to_project[project_slug]
+
                 if not project:
-                    self.log_error(f"项目密钥的项目 {project_slug} 不存在")
+                    self.log_error(f"项目密钥的项目 {project_id} 不存在")
                     continue
 
-                self.log_dry_run(f"Would create project key for {project_slug}")
+                self.log_dry_run(f"Would create project key for {project.slug}")
 
                 if not self.dry_run:
                     # 检查密钥是否已存在
@@ -504,14 +526,23 @@ class ConfigImporter:
         # 最后导入项目计数器
         for counter_data in project_counters_data:
             try:
-                project_slug = counter_data.get('project_id')  # 这里存储的是slug
-                project = self.slug_to_project.get(project_slug)
+                project_id = counter_data.get('project')  # 这里存储的是原始ID
+
+                # 先尝试通过ID查找项目，如果失败再尝试slug
+                project = None
+                if project_id and project_id in self.id_to_project:
+                    project = self.id_to_project[project_id]
+                else:
+                    # 如果找不到，尝试通过slug查找（兼容性）
+                    project_slug = counter_data.get('project_id')
+                    if project_slug and project_slug in self.slug_to_project:
+                        project = self.slug_to_project[project_slug]
 
                 if not project:
-                    self.log_error(f"项目计数器的项目 {project_slug} 不存在")
+                    self.log_error(f"项目计数器的项目 {project_id} 不存在")
                     continue
 
-                self.log_dry_run(f"Would create project counter for {project_slug}")
+                self.log_dry_run(f"Would create project counter for {project.slug}")
 
                 if not self.dry_run:
                     # 检查计数器是否已存在
