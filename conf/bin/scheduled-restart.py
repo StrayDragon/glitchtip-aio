@@ -22,6 +22,29 @@ import psycopg2
 import redis
 from urllib.parse import urlparse
 
+# 获取脚本所在目录的绝对路径
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def load_environment_from_file():
+    """从.env文件加载环境变量（仅在cron环境中需要）"""
+    # .env文件应该与脚本在同一目录的上级目录中
+    env_file = os.path.join(SCRIPT_DIR, ".env")
+
+    if os.path.exists(env_file):
+        with open(env_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    # 只设置当前环境中不存在的变量
+                    if not os.getenv(key):
+                        os.environ[key] = value
+
+
+# 在脚本开始时加载环境变量（如果需要）
+load_environment_from_file()
+
 
 @dataclass
 class HealthCheckResult:

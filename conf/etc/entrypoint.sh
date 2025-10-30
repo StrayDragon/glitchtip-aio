@@ -71,7 +71,15 @@ ENABLE_ORGANIZATION_CREATION=${ENABLE_ORGANIZATION_CREATION}
 
 # 数据库连接配置
 DB_HOST=${DB_HOST}
+
+# 飞书webhook配置
+FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL=${FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL}
 ENV_EOF
+
+# 创建agent日志目录和文件
+mkdir -p /var/log/agent
+touch /var/log/agent/scheduled-restart.log
+chmod 644 /var/log/agent/scheduled-restart.log
 
 echo "=== Glitchtip AIO Container Starting ==="
 echo "Configuration:"
@@ -87,6 +95,15 @@ echo "========================================"
 # 创建必要的目录和文件
 mkdir -p /var/log/supervisor /var/run/redis /var/run/postgresql /var/log/redis
 touch /var/log/supervisor/supervisord.log
+
+# 创建agent日志目录和文件
+mkdir -p /var/log/agent
+touch /var/log/agent/scheduled-restart.log
+chmod 644 /var/log/agent/scheduled-restart.log
+
+# 启动cron服务 (系统crontab已包含环境变量配置)
+echo "Starting cron service with system crontab..."
+service cron start
 
 # 设置权限和用户
 chmod +x /code/bin/*.sh

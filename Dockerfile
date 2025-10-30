@@ -47,13 +47,15 @@ RUN mkdir -p /etc/postgresql && \
 COPY conf/bin/ /code/bin/
 COPY conf/supervisor/ /etc/supervisor/conf.d/
 COPY conf/etc/entrypoint.sh /entrypoint.sh
+COPY conf/etc/crontab /etc/crontab
 COPY conf/etc/pip.conf /etc/pip.conf
 
 # 设置执行权限并复制二进制文件
 RUN chmod +x /code/bin/*.sh /entrypoint.sh && \
     cp /code/bin/health-check /usr/local/bin/ && \
     cp /code/bin/process_monitor /usr/local/bin/ && \
-    chmod +x /usr/local/bin/*
+    chmod +x /usr/local/bin/* && \
+    chmod +x /code/bin/*.py
 
 # 暴露端口 - 只暴露 web 服务端口
 EXPOSE 8000
