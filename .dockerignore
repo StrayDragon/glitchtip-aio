@@ -41,6 +41,7 @@ Thumbs.db
 # Python files
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
@@ -159,3 +160,6 @@ temp/
 *justfile
 
 source_code/
+
+.venv/
+**/.venv/

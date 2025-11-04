@@ -8,6 +8,4 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-# 每6小时执行一次定时重启任务
 0 22 * * * root /code/bin/scheduled-restart.py >> /var/log/agent/scheduled-restart.log 2>&1
-
