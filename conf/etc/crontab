@@ -6,6 +6,13 @@
 # that none of the other crontabs do.
 
 SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
 
-0 22 * * * root /code/bin/scheduled-restart.py >> /var/log/agent/scheduled-restart.log 2>&1
+# 每小时执行一次分区维护，避免 /api/0/issues/*/events/latest/ 404问题
+0 * * * *   root    /code/bin/partition-maintainer.py >> /var/log/partition-maintenance.log 2>&1
+
+# 每天凌晨6点执行完整维护任务（包括文件清理等)
+0 22 * * *   root    cd /code && /code/bin/manage-with-env.py shell -c "from glitchtip.tasks import perform_maintenance; perform_maintenance()" >> /var/log/full-maintenance.log 2>&1
+
+# 每周日凌晨4点执行完整的系统重启 (如果需要的话)
+0 20 * * 0   root    /code/bin/scheduled-restart.py >> /var/log/weekly-restart.log 2>&1
