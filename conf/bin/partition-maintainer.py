@@ -21,15 +21,20 @@ def load_env():
         with open(env_file) as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value.strip('"\'')
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key] = value.strip("\"'")
     return os.environ
+
+
+def get_domain_info():
+    """获取环境域名信息用于区分多环境"""
+    return os.getenv("GLITCHTIP_DOMAIN", "Unknown")
 
 
 def send_feishu_notification(title, content, is_success=True):
     """发送飞书通知"""
-    webhook_url = os.environ.get('FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL')
+    webhook_url = os.environ.get("FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ 未配置飞书webhook，跳过通知")
         return False
@@ -45,46 +50,35 @@ def send_feishu_notification(title, content, is_success=True):
     payload = {
         "msg_type": "interactive",
         "card": {
-            "config": {
-                "wide_screen_mode": True
-            },
+            "config": {"wide_screen_mode": True},
             "header": {
-                "title": {
-                    "tag": "plain_text",
-                    "content": f"{emoji} {title}"
-                },
-                "template": color
+                "title": {"tag": "plain_text", "content": f"{emoji} {title}"},
+                "template": color,
             },
             "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": content
-                    }
-                },
+                {"tag": "div", "text": {"tag": "lark_md", "content": content}},
                 {
                     "tag": "div",
                     "text": {
                         "tag": "plain_text",
-                        "content": f"📅 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                    }
-                }
-            ]
-        }
+                        "content": f"📅 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    },
+                },
+            ],
+        },
     }
 
     try:
         response = requests.post(
             webhook_url,
             json=payload,
-            headers={'Content-Type': 'application/json'},
-            timeout=10
+            headers={"Content-Type": "application/json"},
+            timeout=10,
         )
 
         if response.status_code == 200:
             result = response.json()
-            if result.get('code') == 0:
+            if result.get("code") == 0:
                 print(f"✅ 飞书通知发送成功")
                 return True
             else:
@@ -110,7 +104,7 @@ def run_partition_maintenance():
             cmd,
             capture_output=True,
             text=True,
-            timeout=300  # 5分钟超时
+            timeout=300,  # 5分钟超时
         )
 
         success = result.returncode == 0
@@ -121,8 +115,8 @@ def run_partition_maintenance():
         partition_count = 0
         if success:
             # 从输出中提取分区创建数量
-            for line in stdout.split('\n'):
-                if 'partitions will be created' in line:
+            for line in stdout.split("\n"):
+                if "partitions will be created" in line:
                     try:
                         partition_count = int(line.split()[0])
                     except (ValueError, IndexError):
@@ -160,14 +154,17 @@ def main():
     # 准备飞书通知内容
     title = "GlitchTip AIO 分区维护报告"
 
+    svc_domain = get_domain_info()
+
     if success:
-        content = f"""**🎯 执行状态**: 成功
+        content = f"""**服务**: {svc_domain}
+**🎯 执行状态**: 成功
 **⏱️ 总耗时**: {execution_time:.2f}秒
 **📊 创建分区数**: {partition_count}
 
 **📝 执行详情**:
 ```
-{stdout[:800]}{'...' if len(stdout) > 800 else ''}
+{stdout[:800]}{"..." if len(stdout) > 800 else ""}
 ```
 
 **🔧 维护说明**:
