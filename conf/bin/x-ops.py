@@ -42,7 +42,7 @@ from apps.organizations_ext.models import Organization, OrganizationUser, Organi
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import Project, ProjectKey, ProjectCounter, UserProjectAlert
 from apps.teams.models import Team
-from apps.alerts.models import ProjectAlert, AlertRecipient
+from apps.alerts.models import ProjectAlert, AlertRecipient, Notification
 from apps.environments.models import Environment, EnvironmentProject
 from apps.api_tokens.models import APIToken
 
@@ -97,7 +97,6 @@ class ConfigExporter:
 
     def export_users(self):
         """导出用户数据"""
-        print("正在导出用户数据...")
         users = []
         for user in User.objects.all():
             user_data = self.serialize_model(user, exclude_fields=['password'])
@@ -106,11 +105,9 @@ class ConfigExporter:
             users.append(user_data)
 
         self.export_data['data']['users'] = users
-        print(f"已导出 {len(users)} 个用户")
 
     def export_organizations(self):
         """导出组织数据"""
-        print("正在导出组织数据...")
         organizations = []
         org_users = []
         org_owners = []
@@ -134,11 +131,9 @@ class ConfigExporter:
         self.export_data['data']['organization_users'] = org_users
         self.export_data['data']['organization_owners'] = org_owners
 
-        print(f"已导出 {len(organizations)} 个组织, {len(org_users)} 个组织用户关系")
-
     def export_projects(self):
         """导出项目数据"""
-        print("正在导出项目数据...")
+        # print("正在导出项目数据...")
         projects = []
         project_keys = []
         project_counters = []
@@ -165,11 +160,8 @@ class ConfigExporter:
         self.export_data['data']['project_keys'] = project_keys
         self.export_data['data']['project_counters'] = project_counters
 
-        print(f"已导出 {len(projects)} 个项目, {len(project_keys)} 个项目密钥")
-
     def export_teams(self):
         """导出团队数据"""
-        print("正在导出团队数据...")
         teams = []
 
         for team in Team.objects.all():
@@ -183,11 +175,9 @@ class ConfigExporter:
             teams.append(team_data)
 
         self.export_data['data']['teams'] = teams
-        print(f"已导出 {len(teams)} 个团队")
 
     def export_alerts(self):
         """导出告警配置"""
-        print("正在导出告警配置...")
         project_alerts = []
         alert_recipients = []
 
@@ -204,11 +194,8 @@ class ConfigExporter:
         self.export_data['data']['project_alerts'] = project_alerts
         self.export_data['data']['alert_recipients'] = alert_recipients
 
-        print(f"已导出 {len(project_alerts)} 个告警规则, {len(alert_recipients)} 个告警接收者")
-
     def export_environments(self):
         """导出环境配置"""
-        print("正在导出环境配置...")
         environments = []
         env_projects = []
 
@@ -227,11 +214,8 @@ class ConfigExporter:
         self.export_data['data']['environments'] = environments
         self.export_data['data']['environment_projects'] = env_projects
 
-        print(f"已导出 {len(environments)} 个环境, {len(env_projects)} 个环境项目关联")
-
     def export_api_tokens(self):
         """导出API令牌"""
-        print("正在导出API令牌...")
         api_tokens = []
 
         for token in APIToken.objects.all():
@@ -242,11 +226,9 @@ class ConfigExporter:
             api_tokens.append(token_data)
 
         self.export_data['data']['api_tokens'] = api_tokens
-        print(f"已导出 {len(api_tokens)} 个API令牌")
 
     def export_user_project_alerts(self):
         """导出用户项目告警设置"""
-        print("正在导出用户项目告警设置...")
         user_project_alerts = []
 
         for alert in UserProjectAlert.objects.all():
@@ -256,7 +238,19 @@ class ConfigExporter:
             user_project_alerts.append(alert_data)
 
         self.export_data['data']['user_project_alerts'] = user_project_alerts
-        print(f"已导出 {len(user_project_alerts)} 个用户项目告警设置")
+
+    def export_notifications(self):
+        """导出告警通知历史记录"""
+        notifications = []
+
+        for notification in Notification.objects.all():
+            notification_data = self.serialize_model(notification)
+            notification_data['project_alert_name'] = notification.project_alert.name
+            notification_data['project_slug'] = notification.project_alert.project.slug
+            notification_data['issue_ids'] = list(notification.issues.values_list('id', flat=True))
+            notifications.append(notification_data)
+
+        self.export_data['data']['notifications'] = notifications
 
     def export_all(self):
         """导出所有配置数据"""
@@ -269,10 +263,10 @@ class ConfigExporter:
             self.export_environments()
             self.export_api_tokens()
             self.export_user_project_alerts()
+            self.export_notifications()
 
             return True
         except Exception as e:
-            print(f"导出失败: {str(e)}")
             return False
 
     def get_export_data(self):
@@ -305,6 +299,33 @@ class ConfigImporter:
         error_msg = f"ERROR: {message}"
         self.import_stats['errors'].append(error_msg)
         print(error_msg)
+
+    def _sanitize_tags_array(self, tags):
+        """清理和规范化标签数组，确保PostgreSQL ArrayField兼容性"""
+        if tags is None:
+            return []
+        if not tags:
+            return []
+        if isinstance(tags, str):
+            # 如果是字符串形式的JSON数组，尝试解析
+            if tags.startswith('[') and tags.endswith(']'):
+                try:
+                    import json
+                    parsed = json.loads(tags)
+                    if isinstance(parsed, list):
+                        return [str(tag) for tag in parsed if tag]
+                except json.JSONDecodeError:
+                    pass
+            # 如果是逗号分隔的字符串
+            if ',' in tags:
+                return [tag.strip() for tag in tags.split(',') if tag.strip()]
+            # 单个标签
+            return [tags]
+        if isinstance(tags, list):
+            # 确保列表中的每个元素都是字符串
+            return [str(tag) for tag in tags if tag is not None and str(tag).strip()]
+        # 其他类型，转换为字符串列表
+        return [str(tags)] if tags else []
 
     def log_info(self, message):
         """记录信息"""
@@ -610,7 +631,9 @@ class ConfigImporter:
 
     def import_alerts(self, alerts_data, recipients_data):
         """导入告警配置"""
-        print("正在导入告警配置...")
+
+        # 创建告警规则映射，用于后续关联告警接收者
+        alert_mapping = {}
 
         # 先导入告警规则
         for alert_data in alerts_data:
@@ -633,20 +656,108 @@ class ConfigImporter:
                         uptime=alert_data.get('uptime', False)
                     )
                     self.log_info(f"创建告警规则: {alert.name}")
+                    # 保存映射关系：原始ID -> 新创建的告警规则
+                    alert_mapping[alert_data.get('id')] = alert
 
                 self.import_stats['alerts'] += 1
 
             except Exception as e:
                 self.log_error(f"导入告警规则失败: {str(e)}")
 
-        # 然后导入告警接收者（这里简化处理，实际可能需要更复杂的关联）
+        # 然后导入告警接收者
         for recipient_data in recipients_data:
             try:
+                alert_id = recipient_data.get('alert')  # 原始告警规则ID
+                recipient_type = recipient_data.get('recipient_type')
+                url = recipient_data.get('url', '')
+
+                # 根据原始ID查找新创建的告警规则
+                alert = None
+                if alert_id and alert_id in alert_mapping:
+                    alert = alert_mapping[alert_id]
+                else:
+                    # 如果找不到对应告警规则，尝试通过项目名称和告警名称查找
+                    project_slug = recipient_data.get('project_slug')
+                    alert_name = recipient_data.get('alert_name')
+                    if project_slug and alert_name:
+                        project = self.slug_to_project.get(project_slug)
+                        if project:
+                            alert = ProjectAlert.objects.filter(project=project, name=alert_name).first()
+
+                if not alert:
+                    self.log_error(f"告警接收者的告警规则不存在: alert_id={alert_id}")
+                    continue
+
+                self.log_dry_run(f"Would create alert recipient for {alert.name}")
+
                 if not self.dry_run:
-                    # 简化处理，实际需要根据告警规则关联
-                    pass
+                    # 检查接收者是否已存在
+                    if AlertRecipient.objects.filter(
+                        alert=alert,
+                        recipient_type=recipient_type,
+                        url=url
+                    ).exists():
+                        self.log_info(f"告警接收者已存在，跳过创建")
+                    else:
+                        recipient = AlertRecipient.objects.create(
+                            alert=alert,
+                            recipient_type=recipient_type,
+                            url=url,
+                            tags_to_add=self._sanitize_tags_array(recipient_data.get('tags_to_add'))
+                        )
+                        self.log_info(f"创建告警接收者: {recipient_type} - {url}")
+
             except Exception as e:
                 self.log_error(f"导入告警接收者失败: {str(e)}")
+
+        return alert_mapping
+
+    def import_notifications(self, notifications_data, alert_mapping):
+        """导入告警通知历史记录"""
+
+        for notification_data in notifications_data:
+            try:
+                project_slug = notification_data.get('project_slug', '')
+                alert_name = notification_data.get('project_alert_name', '')
+                project = self.slug_to_project.get(project_slug)
+
+                if not project:
+                    self.log_error(f"通知历史的项目 {project_slug} 不存在")
+                    continue
+
+                # 查找对应的告警规则
+                alert = None
+                alert_id = notification_data.get('project_alert')  # 原始ID
+                if alert_id and alert_id in alert_mapping:
+                    alert = alert_mapping[alert_id]
+                else:
+                    # 通过项目名称和告警名称查找
+                    if alert_name:
+                        alert = ProjectAlert.objects.filter(project=project, name=alert_name).first()
+
+                if not alert:
+                    self.log_error(f"通知历史的告警规则不存在: {alert_name}")
+                    continue
+
+                self.log_dry_run(f"Would create notification for {alert.name}")
+
+                if not self.dry_run:
+                    notification = Notification.objects.create(
+                        project_alert=alert,
+                        is_sent=notification_data.get('is_sent', False)
+                    )
+
+                    # 关联issues
+                    issue_ids = notification_data.get('issue_ids', [])
+                    if issue_ids:
+                        from apps.issue_events.models import Issue
+                        issues = Issue.objects.filter(id__in=issue_ids)
+                        notification.issues.add(*issues)
+
+                    self.log_info(f"创建通知历史记录: {notification.id}")
+
+            except Exception as e:
+                self.log_error(f"导入通知历史失败: {str(e)}")
 
     def import_environments(self, envs_data, env_projects_data):
         """导入环境配置"""
@@ -756,53 +867,75 @@ class ConfigImporter:
     def import_all(self, export_data):
         """导入所有配置数据"""
         try:
-            with transaction.atomic():
-                if self.dry_run:
-                    print("=== 试运行模式，不会实际修改数据 ===")
+            data = export_data.get('data', {})
+            alert_mapping = {}
 
-                data = export_data.get('data', {})
+            # 第一阶段：核心数据（用户、组织、项目）- 在单个事务中
+            try:
+                with transaction.atomic():
+                    if self.dry_run:
+                        print("=== 试运行模式，不会实际修改数据 ===")
 
-                # 按依赖顺序导入
-                if 'users' in data:
-                    self.import_users(data['users'])
+                    if 'users' in data:
+                        self.import_users(data['users'])
 
-                if 'organizations' in data and 'organization_users' in data:
-                    self.import_organizations(
-                        data['organizations'],
-                        data['organization_users'],
-                        data.get('organization_owners', [])
-                    )
+                    if 'organizations' in data and 'organization_users' in data:
+                        self.import_organizations(
+                            data['organizations'],
+                            data['organization_users'],
+                            data.get('organization_owners', [])
+                        )
 
-                if 'projects' in data:
-                    self.import_projects(
-                        data['projects'],
-                        data.get('project_keys', []),
-                        data.get('project_counters', [])
-                    )
+                    if 'projects' in data:
+                        self.import_projects(
+                            data['projects'],
+                            data.get('project_keys', []),
+                            data.get('project_counters', [])
+                        )
 
-                if 'teams' in data:
-                    self.import_teams(data['teams'])
+                    if 'teams' in data:
+                        self.import_teams(data['teams'])
 
-                if 'environments' in data:
-                    self.import_environments(
-                        data['environments'],
-                        data.get('environment_projects', [])
-                    )
+                    if 'environments' in data:
+                        self.import_environments(
+                            data['environments'],
+                            data.get('environment_projects', [])
+                        )
 
-                if 'project_alerts' in data:
-                    self.import_alerts(
-                        data['project_alerts'],
-                        data.get('alert_recipients', [])
-                    )
+            except Exception as e:
+                self.log_error(f"核心数据导入失败: {str(e)}")
 
-                if 'api_tokens' in data:
-                    self.import_api_tokens(data['api_tokens'])
+            # 第二阶段：告警配置 - 单独事务
+            try:
+                with transaction.atomic():
+                    if 'project_alerts' in data:
+                        alert_mapping = self.import_alerts(
+                            data['project_alerts'],
+                            data.get('alert_recipients', [])
+                        )
+            except Exception as e:
+                self.log_error(f"告警配置导入失败: {str(e)}")
 
-                if self.dry_run:
-                    print("=== 试运行完成，未修改任何数据 ===")
-                    return True
+            # 第三阶段：API令牌 - 单独事务
+            try:
+                with transaction.atomic():
+                    if 'api_tokens' in data:
+                        self.import_api_tokens(data['api_tokens'])
+            except Exception as e:
+                self.log_error(f"API令牌导入失败: {str(e)}")
 
-                return True
+            # 第四阶段：通知历史 - 单独事务
+            try:
+                with transaction.atomic():
+                    if 'notifications' in data:
+                        self.import_notifications(data['notifications'], alert_mapping)
+            except Exception as e:
+                self.log_error(f"通知历史导入失败: {str(e)}")
+
+            if self.dry_run:
+                print("=== 试运行完成，未修改任何数据 ===")
+
+            return True
 
         except Exception as e:
             self.log_error(f"导入失败: {str(e)}")
@@ -849,7 +982,6 @@ def main():
     success = False
 
     if args.command == 'export':
-        print("开始导出配置数据...")
         exporter = ConfigExporter()
 
         if exporter.export_all():
@@ -860,15 +992,14 @@ def main():
                 try:
                     with open(args.output, 'w', encoding='utf-8') as f:
                         f.write(output_json)
-                    print(f"配置已导出到: {args.output}")
                     success = True
                 except Exception as e:
-                    print(f"写入文件失败: {str(e)}")
+                    sys.stderr.write(f"写入文件失败: {str(e)}\n")
             else:
-                print(output_json)
+                print(output_json, end='')
                 success = True
         else:
-            print("导出失败")
+            sys.stderr.write("导出失败\n")
 
     elif args.command == 'import':
         print("开始导入配置数据...")
