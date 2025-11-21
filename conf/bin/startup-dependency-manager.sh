@@ -84,27 +84,30 @@ main() {
         exit 1
     fi
 
-    # Step 2: Start and wait for migrations (only in PostgreSQL-only mode or first run)
-    if [ "${DISABLE_REDIS:-false}" = "true" ]; then
-        echo -e "${YELLOW}PostgreSQL-only mode: Starting migrations...${NC}"
-        supervisorctl start migrate
+    # Step 2: Always run migrations after database is ready (regardless of Redis mode)
+    echo -e "${YELLOW}Running database migrations...${NC}"
+    supervisorctl start migrate
 
-        # Wait for migrations to complete
-        local migrate_timeout=120
-        local attempt=0
-        while [ $attempt -lt $migrate_timeout ]; do
-            local status=$(supervisorctl status migrate 2>/dev/null | awk '{print $2}')
-            if [ "$status" = "EXITED" ]; then
-                echo -e "${GREEN}✓ Migrations completed${NC}"
-                break
-            elif [ "$status" = "FATAL" ]; then
-                echo -e "${RED}✗ Migrations failed${NC}"
-                exit 1
-            fi
-            echo -e "${YELLOW}Migration in progress... ($((attempt + 1))/$migrate_timeout)${NC}"
-            sleep 2
-            attempt=$((attempt + 1))
-        done
+    # Wait for migrations to complete
+    local migrate_timeout=120
+    local attempt=0
+    while [ $attempt -lt $migrate_timeout ]; do
+        local status=$(supervisorctl status migrate 2>/dev/null | awk '{print $2}')
+        if [ "$status" = "EXITED" ]; then
+            echo -e "${GREEN}✓ Migrations completed${NC}"
+            break
+        elif [ "$status" = "FATAL" ]; then
+            echo -e "${RED}✗ Migrations failed${NC}"
+            exit 1
+        fi
+        echo -e "${YELLOW}Migration in progress... ($((attempt + 1))/$migrate_timeout)${NC}"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    if [ $attempt -ge $migrate_timeout ]; then
+        echo -e "${RED}✗ Migrations timed out after $migrate_timeout seconds${NC}"
+        exit 1
     fi
 
     # Step 3: Wait for Redis (if enabled)
