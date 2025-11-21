@@ -98,8 +98,8 @@ def run_partition_maintenance():
     print("🔧 开始执行分区维护...")
 
     try:
-        # 执行分区管理命令
-        cmd = ["/code/bin/manage-with-env.sh", "pgpartition", "--yes"]
+        # 执行分区管理命令，使用安静模式隐藏敏感信息
+        cmd = ["/code/bin/manage-with-env.sh", "--quiet", "pgpartition", "--yes"]
         result = subprocess.run(
             cmd,
             capture_output=True,
