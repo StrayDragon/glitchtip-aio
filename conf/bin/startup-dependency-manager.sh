@@ -109,8 +109,11 @@ main() {
         attempt=$((attempt + 5))
     done
 
-    # Step 3: Wait for Redis (if enabled)
+    # Step 3: Start Redis (if enabled)
     if [ "${DISABLE_REDIS:-false}" != "true" ]; then
+        echo -e "${YELLOW}Starting Redis service...${NC}"
+        supervisorctl start redis
+
         if ! wait_for_service "redis"; then
             echo -e "${RED}Fatal: Redis failed to start${NC}"
             exit 1
