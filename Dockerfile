@@ -1,4 +1,4 @@
-FROM glitchtip/glitchtip:v5.1
+FROM glitchtip/glitchtip:v5.2
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
