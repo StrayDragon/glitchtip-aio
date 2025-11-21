@@ -2,21 +2,23 @@
 echo "Starting Django web server..."
 cd /code
 
+# Load environment variables
+source /code/etc/environment.sh
+
 # 等待依赖服务启动
 until nc -z localhost 5432; do
     echo "Waiting for PostgreSQL to be ready..."
     sleep 2
 done
 
-until nc -z localhost 6379; do
-    echo "Waiting for Redis to be ready..."
-    sleep 2
-done
+# Only wait for Redis if not disabled
+if [ "${DISABLE_REDIS:-false}" != "true" ]; then
+    until nc -z localhost 6379; do
+        echo "Waiting for Redis to be ready..."
+        sleep 2
+    done
+fi
 
-export DATABASE_URL="${DATABASE_URL:-postgres://postgres:${DB_PASSWORD:-postgres}@localhost:5432/postgres}"
-export REDIS_URL=redis://localhost:6379/0
-export CELERY_BROKER_URL=redis://localhost:6379/0
-export CELERY_RESULT_BACKEND=redis://localhost:6379/0
 export DJANGO_SETTINGS_MODULE=glitchtip.settings
 
 # 优化Python环境
@@ -27,16 +29,27 @@ export PYTHONUNBUFFERED=1
 echo "Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
-echo "Starting Gunicorn production server..."
-exec gunicorn glitchtip.wsgi:application \
-    --bind 0.0.0.0:${PORT:-8000} \
-    --workers 2 \
-    --threads 4 \
-    --timeout 120 \
-    --keep-alive 5 \
-    --max-requests 1000 \
-    --max-requests-jitter 100 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info \
-    --capture-output
+# 设置默认端口
+CURRENT_PORT=${PORT:-8000}
+
+echo "Port configuration: PORT=${PORT}, CURRENT_PORT=${CURRENT_PORT}"
+
+# 检查是否为开发模式
+if [ "${DEBUG}" = "true" ]; then
+    echo "Starting Django development server on port ${CURRENT_PORT}..."
+    exec python manage.py runserver 0.0.0.0:8000
+else
+    echo "Starting Gunicorn production server on port 8000..."
+    exec gunicorn glitchtip.wsgi:application \
+        --bind 0.0.0.0:8000 \
+        --workers 2 \
+        --threads 4 \
+        --timeout 120 \
+        --keep-alive 5 \
+        --max-requests 1000 \
+        --max-requests-jitter 100 \
+        --access-logfile - \
+        --error-logfile - \
+        --log-level info \
+        --capture-output
+fi

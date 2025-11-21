@@ -1,72 +1,77 @@
 #!/bin/bash
-echo "Running comprehensive health check..."
+echo "Running supervisor-based health check..."
 
-# 检查PostgreSQL
-if nc -z localhost 5432; then
-    echo "✓ PostgreSQL is running"
+# 颜色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-    # 检查PostgreSQL连接
-    if timeout 5 psql "${DATABASE_URL:-postgres://postgres:${DB_PASSWORD:-postgres}@localhost:5432/postgres}" -c "SELECT 1;" > /dev/null 2>&1; then
-        echo "✓ PostgreSQL connection is working"
+# 加载环境变量
+if [ -f "/code/etc/environment.sh" ]; then
+    source /code/etc/environment.sh
+fi
+
+echo -e "${GREEN}🔍 通过 Supervisor 检查服务状态...${NC}"
+
+# 定义需要检查的服务
+if [ "${DISABLE_REDIS:-false}" = "true" ]; then
+    REQUIRED_SERVICES="postgres web celery"
+    OPTIONAL_SERVICES="process_monitor"
+    echo -e "${GREEN}模式: PostgreSQL-only${NC}"
+else
+    REQUIRED_SERVICES="postgres redis web celery"
+    OPTIONAL_SERVICES="process_monitor"
+    echo -e "${GREEN}模式: 标准模式 (使用Redis)${NC}"
+fi
+
+# 检查必需的服务
+failed_services=""
+for service in $REQUIRED_SERVICES; do
+    status=$(sudo supervisorctl status "$service" 2>/dev/null | awk '{print $2}')
+    if [ "$status" = "RUNNING" ]; then
+        echo -e "${GREEN}✓ $service 运行中${NC}"
     else
-        echo "✗ PostgreSQL connection failed"
-        exit 1
+        echo -e "${RED}✗ $service 未运行 (状态: $status)${NC}"
+        failed_services="$failed_services $service"
     fi
-else
-    echo "✗ PostgreSQL is not running"
-    exit 1
-fi
+done
 
-# 检查Redis
-if nc -z localhost 6379; then
-    echo "✓ Redis is running"
-
-    # 检查Redis连接
-    if timeout 5 redis-cli ping > /dev/null 2>&1; then
-        echo "✓ Redis connection is working"
+# 检查可选的服务
+for service in $OPTIONAL_SERVICES; do
+    status=$(sudo supervisorctl status "$service" 2>/dev/null | awk '{print $2}')
+    if [ "$status" = "RUNNING" ]; then
+        echo -e "${GREEN}✓ $service 运行中${NC}"
+    elif [ "$status" = "EXITED" ] && [ "$service" = "migrate" ]; then
+        echo -e "${GREEN}✓ $service 已完成 (正常退出)${NC}"
     else
-        echo "✗ Redis connection failed"
-        exit 1
+        echo -e "${YELLOW}⚠ $service 状态异常: $status${NC}"
     fi
-else
-    echo "✗ Redis is not running"
+done
+
+# 如果有必需服务失败，退出检查
+if [ -n "$failed_services" ]; then
+    echo -e "${RED}✗ 以下必需服务未运行: $failed_services${NC}"
     exit 1
 fi
 
-# 检查Django应用
-if curl -f http://localhost:8000/_health/ > /dev/null 2>&1; then
-    echo "✓ Django application is running"
-
-    # 检查Django应用响应时间
-    response_time=$(curl -o /dev/null -s -w '%{time_total}' http://localhost:8000/_health/)
-    echo "✓ Django application response time: ${response_time}s"
-
-    # 检查响应时间是否过长
-    if [ "$(echo "$response_time > 5.0" | awk '{print ($1 > 5.0) ? 1 : 0}')" = "1" ]; then
-        echo "⚠ Django application response time is slow"
-    fi
+# 额外检查：Django健康端点
+if curl -f http://localhost:${PORT:-8000}/_health/ > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Django 健康检查通过${NC}"
 else
-    echo "✗ Django application is not responding"
+    echo -e "${RED}✗ Django 健康检查失败${NC}"
     exit 1
 fi
 
-# 检查Celery工作进程
-if pgrep -f "celery.*worker" > /dev/null; then
-    echo "✓ Celery worker is running"
-else
-    echo "✗ Celery worker is not running"
-    exit 1
-fi
-
-# 检查系统资源
-memory_usage=$(free | grep Mem | awk '{printf "%.2f", $3/$2 * 100.0}')
-echo "✓ Memory usage: ${memory_usage}%"
-
+# 系统资源检查
+memory_usage=$(free | grep Mem | awk '{printf "%.1f", $3/$2 * 100.0}')
 disk_usage=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-echo "✓ Disk usage: ${disk_usage}%"
+
+echo -e "${GREEN}✓ 内存使用率: ${memory_usage}%${NC}"
+echo -e "${GREEN}✓ 磁盘使用率: ${disk_usage}%${NC}"
 
 if [ "$disk_usage" -gt 90 ]; then
-    echo "⚠ Disk usage is high"
+    echo -e "${YELLOW}⚠ 磁盘使用率过高${NC}"
 fi
 
-echo "✓ All services are healthy"
+echo -e "${GREEN}🎉 所有健康检查通过！${NC}"

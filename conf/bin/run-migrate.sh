@@ -26,4 +26,11 @@ sleep 10
 
 echo "Running Django migrations..."
 python manage.py migrate --noinput
+
+# Create django_cache table if using PostgreSQL cache backend (PostgreSQL-only mode)
+if [ "${DISABLE_REDIS:-false}" = "true" ]; then
+    echo "PostgreSQL-only mode detected, ensuring django_cache table exists..."
+    python manage.py createcachetable || echo "Cache table already exists or creation failed"
+fi
+
 echo "Migrations completed successfully"

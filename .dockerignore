@@ -163,3 +163,4 @@ source_code/
 
 .venv/
 **/.venv/
+trace/

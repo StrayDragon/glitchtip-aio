@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# 设置默认环境变量 - 与官方 docker-compose 保持一致
-export SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
-export PORT="${PORT:-8000}"  # 默认 8000，但允许环境变量覆盖
+# Load environment variables from our configuration
+source /code/etc/environment.sh
+
+# Set additional environment variables
+export PORT="${PORT:-8000}"
 export GLITCHTIP_DOMAIN="${GLITCHTIP_DOMAIN:-http://localhost:8000}"
 export DEFAULT_FROM_EMAIL="${DEFAULT_FROM_EMAIL:-glitchtip@localhost}"
-export DEBUG="${DEBUG:-false}"
-export DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 16)}"
-export DATABASE_URL="${DATABASE_URL:-postgres://postgres:${DB_PASSWORD}@localhost:5432/postgres}"
-export REDIS_URL="${REDIS_URL:-redis://localhost:6379/0}"
-export CELERY_BROKER_URL="${CELERY_BROKER_URL:-redis://localhost:6379/0}"
-export CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-redis://localhost:6379/0}"
+export DB_PASSWORD="${DB_PASSWORD:-postgres}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+
+# 其他配置
 export EMAIL_URL="${EMAIL_URL:-}"
+export SITE_URL="${GLITCHTIP_DOMAIN}"
 
 # Django 安全配置 - 智能设置允许的主机
 if [ -n "$ALLOWED_HOSTS" ]; then
@@ -50,24 +50,37 @@ GLITCHTIP_DOMAIN=${GLITCHTIP_DOMAIN}
 DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
 DEBUG=${DEBUG}
 DATABASE_URL=${DATABASE_URL}
+DB_PASSWORD=${DB_PASSWORD}
+
+# Valkey/Redis 配置
+VALKEY_URL=${VALKEY_URL}
 REDIS_URL=${REDIS_URL}
 CELERY_BROKER_URL=${CELERY_BROKER_URL}
 CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-DB_PASSWORD=${DB_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
-EMAIL_URL=${EMAIL_URL}
-ENABLE_USER_REGISTRATION=${ENABLE_USER_REGISTRATION}
+
+# Celery 性能配置
+CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY}
+CELERY_WORKER_PREFETCH_MULTIPLIER=${CELERY_WORKER_PREFETCH_MULTIPLIER}
+CELERY_WORKER_POOL=${CELERY_WORKER_POOL}
+CELERY_SKIP_CHECKS=${CELERY_SKIP_CHECKS}
+
+# Django 功能配置
 ENABLE_ORGANIZATION_CREATION=${ENABLE_ORGANIZATION_CREATION}
+ENABLE_TEST_API=${ENABLE_TEST_API}
+ENABLE_OBSERVABILITY_API=${ENABLE_OBSERVABILITY_API}
+ENABLE_USER_REGISTRATION=${ENABLE_USER_REGISTRATION}
+EMAIL_BACKEND=${EMAIL_BACKEND}
+EMAIL_URL=${EMAIL_URL}
+SITE_URL=${SITE_URL}
+
+# Django 基础配置
 DJANGO_SETTINGS_MODULE=glitchtip.settings
 PYTHONPATH=/code
 
 # Django 安全配置
 ALLOWED_HOSTS=${ALLOWED_HOSTS}
 CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
-
-# 用户和组织管理配置
-ENABLE_USER_REGISTRATION=${ENABLE_USER_REGISTRATION}
-ENABLE_ORGANIZATION_CREATION=${ENABLE_ORGANIZATION_CREATION}
 
 # 数据库连接配置
 DB_HOST=${DB_HOST}
@@ -81,15 +94,22 @@ mkdir -p /var/log/agent
 touch /var/log/agent/scheduled-restart.log
 chmod 644 /var/log/agent/scheduled-restart.log
 
+# Determine cache backend
+if [ "${DISABLE_REDIS:-false}" = "true" ]; then
+    CACHE_BACKEND="PostgreSQL"
+else
+    CACHE_BACKEND="Redis"
+fi
+
 echo "=== Glitchtip AIO Container Starting ==="
 echo "Configuration:"
 echo "   Domain: ${GLITCHTIP_DOMAIN}"
 echo "   Port: ${PORT}"
 echo "   Debug: ${DEBUG}"
-echo "   Database: PostgreSQL 17 (Host: ${DB_HOST})"
-echo "   Cache: Redis"
+echo "   Database: PostgreSQL 17 (Host: localhost)"
+echo "   Cache: ${CACHE_BACKEND}"
 echo "   Supervisor: Enhanced Configuration"
-echo "   Connection Pool: ${DATABASE_POOL}"
+echo "   Connection Pool: false"
 echo "========================================"
 
 # 创建必要的目录和文件
@@ -132,5 +152,149 @@ export FEISHU_GROUP_DEVOPS_ROBOT_WEBHOOK_URL="${FEISHU_GROUP_DEVOPS_ROBOT_WEBHOO
 ulimit -n 65536
 ulimit -u 32768
 
-echo "Starting enhanced Supervisor with process monitoring..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+# 动态生成 supervisor 配置以支持 PostgreSQL-only 模式
+if [ "${DISABLE_REDIS:-false}" = "true" ]; then
+    echo "PostgreSQL-only mode: Disabling Redis service in supervisor..."
+
+    # 创建临时的 supervisor 配置，移除 Redis 服务
+    cat > /tmp/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+minfds=1024
+minprocs=200
+childlogdir=/var/log/supervisor
+logfile_maxbytes=50MB
+logfile_backups=10
+loglevel=info
+rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[unix_http_server]
+file=/var/run/supervisor.sock
+chmod=0700
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[program:postgres]
+command=/code/bin/start-postgres.sh
+user=postgres
+autostart=true
+autorestart=true
+exitcodes=0,2
+startsecs=30
+stopwaitsecs=20
+startretries=3
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/var/log/supervisor/postgres.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile=/var/log/supervisor/postgres.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+priority=100
+environment=PGDATA="/data/postgres"
+
+[program:migrate]
+command=/code/bin/run-migrate.sh
+user=glitchtip
+autostart=false
+autorestart=false
+startsecs=5
+stopwaitsecs=20
+startretries=3
+stdout_logfile=/var/log/supervisor/migrate.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile=/var/log/supervisor/migrate.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+priority=200
+environment=PYTHONPATH="/code",DJANGO_SETTINGS_MODULE="glitchtip.settings"
+exitcodes=0
+autorestart=unexpected
+stopsignal=INT
+
+[program:celery]
+command=/code/bin/run-celery-with-beat.sh
+user=glitchtip
+autostart=false
+autorestart=unexpected
+exitcodes=0,2,143
+startsecs=15
+stopwaitsecs=20
+startretries=3
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/var/log/supervisor/celery.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile=/var/log/supervisor/celery.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+priority=300
+environment=PYTHONPATH="/code",DJANGO_SETTINGS_MODULE="glitchtip.settings"
+
+[program:web]
+command=/code/bin/run-web.sh
+user=glitchtip
+autostart=false
+autorestart=unexpected
+exitcodes=0,2,143
+startsecs=30
+stopwaitsecs=30
+startretries=5
+stopasgroup=true
+killasgroup=true
+stdout_logfile=/var/log/supervisor/web.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile=/var/log/supervisor/web.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+priority=400
+environment=PYTHONPATH="/code",DJANGO_SETTINGS_MODULE="glitchtip.settings"
+
+[program:startup_manager]
+command=/code/bin/startup-dependency-manager.sh
+user=root
+autostart=true
+autorestart=false
+startsecs=5
+stopwaitsecs=20
+startretries=1
+stdout_logfile=/var/log/supervisor/startup_manager.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile=/var/log/supervisor/startup_manager.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+priority=50
+environment=PYTHONPATH="/code",DJANGO_SETTINGS_MODULE="glitchtip.settings"
+
+[eventlistener:process_monitor]
+command=/usr/local/bin/process_monitor
+events=PROCESS_STATE_FATAL,PROCESS_STATE_EXITED,PROCESS_STATE_RUNNING
+user=root
+stdout_logfile=/var/log/supervisor/process_monitor.log
+stderr_logfile=/var/log/supervisor/process_monitor.err.log
+priority=600
+buffer_size=50
+autostart=true
+autorestart=true
+startsecs=5
+stopwaitsecs=5
+EOF
+
+    echo "Starting enhanced Supervisor with PostgreSQL-only configuration..."
+    exec /usr/bin/supervisord -c /tmp/supervisord.conf
+else
+    echo "Starting enhanced Supervisor with standard configuration..."
+    exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+fi
