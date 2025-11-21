@@ -13,12 +13,11 @@ NC='\033[0m' # No Color
 # Function to wait for service to be running
 wait_for_service() {
     local service_name=$1
-    local timeout=$2
     local attempt=0
 
     echo -e "${YELLOW}Waiting for $service_name to be ready...${NC}"
 
-    while [ $attempt -lt $timeout ]; do
+    while true; do
         local status=$(supervisorctl status "$service_name" 2>/dev/null | awk '{print $2}')
 
         case $status in
@@ -33,41 +32,45 @@ wait_for_service() {
                 ;;
             "STOPPED"|"STARTING")
                 # Still starting up
+                if [ $((attempt % 30)) -eq 0 ] && [ $attempt -gt 0 ]; then
+                    echo -e "${YELLOW}Still waiting for $service_name... (${attempt}s elapsed)${NC}"
+                fi
                 ;;
             *)
-                echo -e "${YELLOW}Attempt $((attempt + 1))/$timeout: $service_name status: $status${NC}"
+                echo -e "${YELLOW}Attempt $((attempt + 1)): $service_name status: $status${NC}"
                 ;;
         esac
 
-        sleep 1
-        attempt=$((attempt + 1))
+        sleep 3
+        attempt=$((attempt + 3))
     done
 
-    echo -e "${RED}✗ $service_name failed to start within timeout${NC}"
+    echo -e "${RED}✗ $service_name failed to start${NC}"
     return 1
 }
 
 # Function to wait for database to be fully ready
 wait_for_database() {
-    local max_attempts=60
     local attempt=0
 
     echo -e "${YELLOW}Waiting for database to be ready...${NC}"
 
     # First wait for postgres service
-    if ! wait_for_service "postgres" $max_attempts; then
+    if ! wait_for_service "postgres"; then
         return 1
     fi
 
     # Then wait for actual database connectivity
-    while [ $attempt -lt $max_attempts ]; do
+    while true; do
         if su - postgres -c "pg_isready -q" 2>/dev/null; then
             echo -e "${GREEN}✓ Database is accepting connections${NC}"
             return 0
         fi
-        echo -e "${YELLOW}Attempt $((attempt + 1))/$max_attempts: Database not ready...${NC}"
-        sleep 2
-        attempt=$((attempt + 1))
+        if [ $((attempt % 15)) -eq 0 ] && [ $attempt -gt 0 ]; then
+            echo -e "${YELLOW}Still waiting for database to accept connections... (${attempt}s elapsed)${NC}"
+        fi
+        sleep 5
+        attempt=$((attempt + 5))
     done
 
     echo -e "${RED}✗ Database failed to become ready${NC}"
@@ -89,9 +92,8 @@ main() {
     supervisorctl start migrate
 
     # Wait for migrations to complete
-    local migrate_timeout=120
     local attempt=0
-    while [ $attempt -lt $migrate_timeout ]; do
+    while true; do
         local status=$(supervisorctl status migrate 2>/dev/null | awk '{print $2}')
         if [ "$status" = "EXITED" ]; then
             echo -e "${GREEN}✓ Migrations completed${NC}"
@@ -100,19 +102,16 @@ main() {
             echo -e "${RED}✗ Migrations failed${NC}"
             exit 1
         fi
-        echo -e "${YELLOW}Migration in progress... ($((attempt + 1))/$migrate_timeout)${NC}"
-        sleep 2
-        attempt=$((attempt + 1))
+        if [ $((attempt % 15)) -eq 0 ] && [ $attempt -gt 0 ]; then
+            echo -e "${YELLOW}Migration in progress... (${attempt}s elapsed)${NC}"
+        fi
+        sleep 5
+        attempt=$((attempt + 5))
     done
-
-    if [ $attempt -ge $migrate_timeout ]; then
-        echo -e "${RED}✗ Migrations timed out after $migrate_timeout seconds${NC}"
-        exit 1
-    fi
 
     # Step 3: Wait for Redis (if enabled)
     if [ "${DISABLE_REDIS:-false}" != "true" ]; then
-        if ! wait_for_service "redis" 30; then
+        if ! wait_for_service "redis"; then
             echo -e "${RED}Fatal: Redis failed to start${NC}"
             exit 1
         fi
@@ -124,7 +123,7 @@ main() {
     echo -e "${YELLOW}Starting Celery worker...${NC}"
     supervisorctl start celery
 
-    if ! wait_for_service "celery" 60; then
+    if ! wait_for_service "celery"; then
         echo -e "${RED}Fatal: Celery failed to start${NC}"
         exit 1
     fi
@@ -133,7 +132,7 @@ main() {
     echo -e "${YELLOW}Starting Web service...${NC}"
     supervisorctl start web
 
-    if ! wait_for_service "web" 60; then
+    if ! wait_for_service "web"; then
         echo -e "${RED}Fatal: Web service failed to start${NC}"
         exit 1
     fi

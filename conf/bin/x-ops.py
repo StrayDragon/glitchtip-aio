@@ -18,27 +18,33 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.contrib.auth import get_user_model
 
+
 # 加载环境变量
-def load_env_file(env_file='/code/.env'):
+def load_env_file(env_file="/code/.env"):
     """从 .env 文件加载环境变量"""
     if os.path.exists(env_file):
-        with open(env_file, 'r') as f:
+        with open(env_file, "r") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
                     os.environ[key] = value
+
 
 # 加载环境变量
 load_env_file()
 
 # 初始化Django环境
-sys.path.insert(0, '/code')
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'glitchtip.settings')
+sys.path.insert(0, "/code")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "glitchtip.settings")
 django.setup()
 
 from django.conf import settings
-from apps.organizations_ext.models import Organization, OrganizationUser, OrganizationOwner
+from apps.organizations_ext.models import (
+    Organization,
+    OrganizationUser,
+    OrganizationOwner,
+)
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import Project, ProjectKey, ProjectCounter, UserProjectAlert
 from apps.teams.models import Team
@@ -48,18 +54,19 @@ from apps.api_tokens.models import APIToken
 
 User = get_user_model()
 
+
 class ConfigExporter:
     """配置导出类"""
 
     def __init__(self):
         self.export_data = {
-            'metadata': {
-                'version': '1.0',
-                'export_time': datetime.datetime.now().isoformat(),
-                'glitchtip_url': getattr(settings, 'GLITCHTIP_URL', ''),
-                'description': 'Glitchtip Configuration Export'
+            "metadata": {
+                "version": "1.0",
+                "export_time": datetime.datetime.now().isoformat(),
+                "glitchtip_url": getattr(settings, "GLITCHTIP_URL", ""),
+                "description": "Glitchtip Configuration Export",
             },
-            'data': {}
+            "data": {},
         }
 
     def serialize_model(self, model_instance, exclude_fields=None):
@@ -86,7 +93,7 @@ class ConfigExporter:
                 data[field_name] = value.isoformat()
             elif isinstance(value, uuid.UUID):
                 data[field_name] = str(value)
-            elif hasattr(value, 'pk'):  # ForeignKey
+            elif hasattr(value, "pk"):  # ForeignKey
                 data[field_name] = value.pk if value else None
             elif isinstance(value, dict):  # JSONField
                 data[field_name] = value
@@ -99,12 +106,12 @@ class ConfigExporter:
         """导出用户数据"""
         users = []
         for user in User.objects.all():
-            user_data = self.serialize_model(user, exclude_fields=['password'])
+            user_data = self.serialize_model(user, exclude_fields=["password"])
             # 保持密码字段，但标记为已加密
-            user_data['password_hash'] = user.password
+            user_data["password_hash"] = user.password
             users.append(user_data)
 
-        self.export_data['data']['users'] = users
+        self.export_data["data"]["users"] = users
 
     def export_organizations(self):
         """导出组织数据"""
@@ -119,17 +126,19 @@ class ConfigExporter:
             # 导出组织用户关系
             for org_user in org.organization_users.all():
                 org_user_data = self.serialize_model(org_user)
-                org_user_data['user_email'] = org_user.user.email if org_user.user else org_user.email
+                org_user_data["user_email"] = (
+                    org_user.user.email if org_user.user else org_user.email
+                )
                 org_users.append(org_user_data)
 
             # 导出组织所有者
-            if hasattr(org, 'owner') and org.owner:
+            if hasattr(org, "owner") and org.owner:
                 owner_data = self.serialize_model(org.owner)
                 org_owners.append(owner_data)
 
-        self.export_data['data']['organizations'] = organizations
-        self.export_data['data']['organization_users'] = org_users
-        self.export_data['data']['organization_owners'] = org_owners
+        self.export_data["data"]["organizations"] = organizations
+        self.export_data["data"]["organization_users"] = org_users
+        self.export_data["data"]["organization_owners"] = org_owners
 
     def export_projects(self):
         """导出项目数据"""
@@ -140,14 +149,14 @@ class ConfigExporter:
 
         for project in Project.objects.all():
             project_data = self.serialize_model(project)
-            project_data['organization_slug'] = project.organization.slug
+            project_data["organization_slug"] = project.organization.slug
             projects.append(project_data)
 
             # 导出项目密钥
             for project_key in project.projectkey_set.all():
                 key_data = self.serialize_model(project_key)
                 # 生成当前DSN
-                key_data['current_dsn'] = project_key.get_dsn()
+                key_data["current_dsn"] = project_key.get_dsn()
                 project_keys.append(key_data)
 
             # 导出项目计数器
@@ -156,9 +165,9 @@ class ConfigExporter:
                 counter_data = self.serialize_model(counter)
                 project_counters.append(counter_data)
 
-        self.export_data['data']['projects'] = projects
-        self.export_data['data']['project_keys'] = project_keys
-        self.export_data['data']['project_counters'] = project_counters
+        self.export_data["data"]["projects"] = projects
+        self.export_data["data"]["project_keys"] = project_keys
+        self.export_data["data"]["project_counters"] = project_counters
 
     def export_teams(self):
         """导出团队数据"""
@@ -166,15 +175,17 @@ class ConfigExporter:
 
         for team in Team.objects.all():
             team_data = self.serialize_model(team)
-            team_data['organization_slug'] = team.organization.slug
-            team_data['member_emails'] = [
+            team_data["organization_slug"] = team.organization.slug
+            team_data["member_emails"] = [
                 org_user.user.email if org_user.user else org_user.email
                 for org_user in team.members.all()
             ]
-            team_data['project_slugs'] = [project.slug for project in team.projects.all()]
+            team_data["project_slugs"] = [
+                project.slug for project in team.projects.all()
+            ]
             teams.append(team_data)
 
-        self.export_data['data']['teams'] = teams
+        self.export_data["data"]["teams"] = teams
 
     def export_alerts(self):
         """导出告警配置"""
@@ -183,7 +194,7 @@ class ConfigExporter:
 
         for alert in ProjectAlert.objects.all():
             alert_data = self.serialize_model(alert)
-            alert_data['project_slug'] = alert.project.slug
+            alert_data["project_slug"] = alert.project.slug
             project_alerts.append(alert_data)
 
             # 导出告警接收者
@@ -191,8 +202,8 @@ class ConfigExporter:
                 recipient_data = self.serialize_model(recipient)
                 alert_recipients.append(recipient_data)
 
-        self.export_data['data']['project_alerts'] = project_alerts
-        self.export_data['data']['alert_recipients'] = alert_recipients
+        self.export_data["data"]["project_alerts"] = project_alerts
+        self.export_data["data"]["alert_recipients"] = alert_recipients
 
     def export_environments(self):
         """导出环境配置"""
@@ -201,18 +212,18 @@ class ConfigExporter:
 
         for env in Environment.objects.all():
             env_data = self.serialize_model(env)
-            env_data['organization_slug'] = env.organization.slug
+            env_data["organization_slug"] = env.organization.slug
             environments.append(env_data)
 
             # 导出环境项目关联
             for env_proj in env.environmentproject_set.all():
                 env_proj_data = self.serialize_model(env_proj)
-                env_proj_data['project_slug'] = env_proj.project.slug
-                env_proj_data['environment_name'] = env_proj.environment.name
+                env_proj_data["project_slug"] = env_proj.project.slug
+                env_proj_data["environment_name"] = env_proj.environment.name
                 env_projects.append(env_proj_data)
 
-        self.export_data['data']['environments'] = environments
-        self.export_data['data']['environment_projects'] = env_projects
+        self.export_data["data"]["environments"] = environments
+        self.export_data["data"]["environment_projects"] = env_projects
 
     def export_api_tokens(self):
         """导出API令牌"""
@@ -220,12 +231,12 @@ class ConfigExporter:
 
         for token in APIToken.objects.all():
             token_data = self.serialize_model(token)
-            token_data['user_email'] = token.user.email
+            token_data["user_email"] = token.user.email
             # 将BitField转换为权限列表
-            token_data['scopes_list'] = token.get_scopes()
+            token_data["scopes_list"] = token.get_scopes()
             api_tokens.append(token_data)
 
-        self.export_data['data']['api_tokens'] = api_tokens
+        self.export_data["data"]["api_tokens"] = api_tokens
 
     def export_user_project_alerts(self):
         """导出用户项目告警设置"""
@@ -233,11 +244,11 @@ class ConfigExporter:
 
         for alert in UserProjectAlert.objects.all():
             alert_data = self.serialize_model(alert)
-            alert_data['user_email'] = alert.user.email
-            alert_data['project_slug'] = alert.project.slug
+            alert_data["user_email"] = alert.user.email
+            alert_data["project_slug"] = alert.project.slug
             user_project_alerts.append(alert_data)
 
-        self.export_data['data']['user_project_alerts'] = user_project_alerts
+        self.export_data["data"]["user_project_alerts"] = user_project_alerts
 
     def export_notifications(self):
         """导出告警通知历史记录"""
@@ -245,12 +256,14 @@ class ConfigExporter:
 
         for notification in Notification.objects.all():
             notification_data = self.serialize_model(notification)
-            notification_data['project_alert_name'] = notification.project_alert.name
-            notification_data['project_slug'] = notification.project_alert.project.slug
-            notification_data['issue_ids'] = list(notification.issues.values_list('id', flat=True))
+            notification_data["project_alert_name"] = notification.project_alert.name
+            notification_data["project_slug"] = notification.project_alert.project.slug
+            notification_data["issue_ids"] = list(
+                notification.issues.values_list("id", flat=True)
+            )
             notifications.append(notification_data)
 
-        self.export_data['data']['notifications'] = notifications
+        self.export_data["data"]["notifications"] = notifications
 
     def export_all(self):
         """导出所有配置数据"""
@@ -273,20 +286,21 @@ class ConfigExporter:
         """获取导出数据"""
         return self.export_data
 
+
 class ConfigImporter:
     """配置导入类"""
 
     def __init__(self, dry_run=False):
         self.dry_run = dry_run
         self.import_stats = {
-            'users': 0,
-            'organizations': 0,
-            'projects': 0,
-            'teams': 0,
-            'alerts': 0,
-            'environments': 0,
-            'api_tokens': 0,
-            'errors': []
+            "users": 0,
+            "organizations": 0,
+            "projects": 0,
+            "teams": 0,
+            "alerts": 0,
+            "environments": 0,
+            "api_tokens": 0,
+            "errors": [],
         }
         self.email_to_user = {}
         self.slug_to_org = {}
@@ -297,7 +311,7 @@ class ConfigImporter:
     def log_error(self, message):
         """记录错误信息"""
         error_msg = f"ERROR: {message}"
-        self.import_stats['errors'].append(error_msg)
+        self.import_stats["errors"].append(error_msg)
         print(error_msg)
 
     def _sanitize_tags_array(self, tags):
@@ -308,17 +322,18 @@ class ConfigImporter:
             return []
         if isinstance(tags, str):
             # 如果是字符串形式的JSON数组，尝试解析
-            if tags.startswith('[') and tags.endswith(']'):
+            if tags.startswith("[") and tags.endswith("]"):
                 try:
                     import json
+
                     parsed = json.loads(tags)
                     if isinstance(parsed, list):
                         return [str(tag) for tag in parsed if tag]
                 except json.JSONDecodeError:
                     pass
             # 如果是逗号分隔的字符串
-            if ',' in tags:
-                return [tag.strip() for tag in tags.split(',') if tag.strip()]
+            if "," in tags:
+                return [tag.strip() for tag in tags.split(",") if tag.strip()]
             # 单个标签
             return [tags]
         if isinstance(tags, list):
@@ -343,8 +358,8 @@ class ConfigImporter:
 
         for user_data in users_data:
             try:
-                email = user_data['email']
-                password_hash = user_data.get('password_hash', '')
+                email = user_data["email"]
+                password_hash = user_data.get("password_hash", "")
 
                 user = None
 
@@ -357,14 +372,16 @@ class ConfigImporter:
                         # 创建用户，保持原密码哈希
                         user = User.objects.create(
                             email=email,
-                            name=user_data.get('name', ''),
-                            is_staff=user_data.get('is_staff', False),
-                            is_superuser=user_data.get('is_superuser', False),
-                            is_active=user_data.get('is_active', True),
+                            name=user_data.get("name", ""),
+                            is_staff=user_data.get("is_staff", False),
+                            is_superuser=user_data.get("is_superuser", False),
+                            is_active=user_data.get("is_active", True),
                             password=password_hash,  # 直接使用原密码哈希
-                            analytics=user_data.get('analytics'),
-                            subscribe_by_default=user_data.get('subscribe_by_default', True),
-                            options=user_data.get('options', {})
+                            analytics=user_data.get("analytics"),
+                            subscribe_by_default=user_data.get(
+                                "subscribe_by_default", True
+                            ),
+                            options=user_data.get("options", {}),
                         )
                         self.log_info(f"创建用户: {email}")
                 else:
@@ -372,10 +389,12 @@ class ConfigImporter:
 
                 if user:
                     self.email_to_user[email] = user
-                self.import_stats['users'] += 1
+                self.import_stats["users"] += 1
 
             except Exception as e:
-                self.log_error(f"导入用户失败 {user_data.get('email', 'unknown')}: {str(e)}")
+                self.log_error(
+                    f"导入用户失败 {user_data.get('email', 'unknown')}: {str(e)}"
+                )
 
     def import_organizations(self, orgs_data, org_users_data, org_owners_data):
         """导入组织数据"""
@@ -384,8 +403,8 @@ class ConfigImporter:
         # 先导入组织
         for org_data in orgs_data:
             try:
-                slug = org_data['slug']
-                name = org_data['name']
+                slug = org_data["slug"]
+                name = org_data["name"]
 
                 org = None
 
@@ -398,10 +417,12 @@ class ConfigImporter:
                         org = Organization.objects.create(
                             name=name,
                             slug=slug,
-                            is_accepting_events=org_data.get('is_accepting_events', True),
-                            event_throttle_rate=org_data.get('event_throttle_rate', 0),
-                            open_membership=org_data.get('open_membership', True),
-                            scrub_ip_addresses=org_data.get('scrub_ip_addresses', True)
+                            is_accepting_events=org_data.get(
+                                "is_accepting_events", True
+                            ),
+                            event_throttle_rate=org_data.get("event_throttle_rate", 0),
+                            open_membership=org_data.get("open_membership", True),
+                            scrub_ip_addresses=org_data.get("scrub_ip_addresses", True),
                         )
                         self.log_info(f"创建组织: {name} ({slug})")
                 else:
@@ -409,18 +430,20 @@ class ConfigImporter:
 
                 if org:
                     self.slug_to_org[slug] = org
-                    self.id_to_org[org_data.get('id')] = org
-                self.import_stats['organizations'] += 1
+                    self.id_to_org[org_data.get("id")] = org
+                self.import_stats["organizations"] += 1
 
             except Exception as e:
-                self.log_error(f"导入组织失败 {org_data.get('slug', 'unknown')}: {str(e)}")
+                self.log_error(
+                    f"导入组织失败 {org_data.get('slug', 'unknown')}: {str(e)}"
+                )
 
         # 然后导入组织用户关系
         for org_user_data in org_users_data:
             try:
-                user_email = org_user_data.pop('user_email', '')
-                org_id = org_user_data.get('organization')  # 这里存储的是原始ID
-                role = org_user_data.get('role', OrganizationUserRole.MEMBER)
+                user_email = org_user_data.pop("user_email", "")
+                org_id = org_user_data.get("organization")  # 这里存储的是原始ID
+                role = org_user_data.get("role", OrganizationUserRole.MEMBER)
 
                 # 先尝试通过ID查找组织，如果失败再尝试slug
                 org = None
@@ -428,7 +451,7 @@ class ConfigImporter:
                     org = self.id_to_org[org_id]
                 else:
                     # 如果找不到，尝试通过slug查找（兼容性）
-                    org_slug = org_user_data.get('organization_id')
+                    org_slug = org_user_data.get("organization_id")
                     if org_slug and org_slug in self.slug_to_org:
                         org = self.slug_to_org[org_slug]
 
@@ -440,20 +463,24 @@ class ConfigImporter:
                     self.log_error(f"用户不存在: {user_email}")
                     continue
 
-                self.log_dry_run(f"Would add user {user_email} to organization {org.name}")
+                self.log_dry_run(
+                    f"Would add user {user_email} to organization {org.name}"
+                )
 
                 if not self.dry_run:
                     user = self.email_to_user[user_email]
 
                     # 检查关系是否已存在
-                    if OrganizationUser.objects.filter(user=user, organization=org).exists():
+                    if OrganizationUser.objects.filter(
+                        user=user, organization=org
+                    ).exists():
                         self.log_info(f"用户 {user_email} 已在组织 {org.name} 中")
                     else:
                         org_user = OrganizationUser.objects.create(
                             user=user,
                             organization=org,
                             role=role,
-                            email=org_user_data.get('email', '')
+                            email=org_user_data.get("email", ""),
                         )
                         self.log_info(f"添加用户 {user_email} 到组织 {org.name}")
 
@@ -467,9 +494,9 @@ class ConfigImporter:
         # 先导入项目
         for project_data in projects_data:
             try:
-                name = project_data['name']
-                slug = project_data['slug']
-                org_slug = project_data.pop('organization_slug', '')
+                name = project_data["name"]
+                slug = project_data["slug"]
+                org_slug = project_data.pop("organization_slug", "")
 
                 if org_slug not in self.slug_to_org:
                     self.log_error(f"项目 {slug} 的组织 {org_slug} 不存在")
@@ -489,24 +516,30 @@ class ConfigImporter:
                             name=name,
                             slug=slug,
                             organization=org,
-                            platform=project_data.get('platform', ''),
-                            scrub_ip_addresses=project_data.get('scrub_ip_addresses', True),
-                            event_throttle_rate=project_data.get('event_throttle_rate', 0)
+                            platform=project_data.get("platform", ""),
+                            scrub_ip_addresses=project_data.get(
+                                "scrub_ip_addresses", True
+                            ),
+                            event_throttle_rate=project_data.get(
+                                "event_throttle_rate", 0
+                            ),
                         )
                         self.log_info(f"创建项目: {name} ({slug})")
 
                 self.slug_to_project[slug] = project
-                self.id_to_project[project_data.get('id')] = project
-                self.import_stats['projects'] += 1
+                self.id_to_project[project_data.get("id")] = project
+                self.import_stats["projects"] += 1
 
             except Exception as e:
-                self.log_error(f"导入项目失败 {project_data.get('slug', 'unknown')}: {str(e)}")
+                self.log_error(
+                    f"导入项目失败 {project_data.get('slug', 'unknown')}: {str(e)}"
+                )
 
         # 然后导入项目密钥
         for key_data in project_keys_data:
             try:
-                project_id = key_data.get('project')  # 这里存储的是原始ID
-                public_key = key_data.get('public_key')
+                project_id = key_data.get("project")  # 这里存储的是原始ID
+                public_key = key_data.get("public_key")
 
                 # 先尝试通过ID查找项目，如果失败再尝试slug
                 project = None
@@ -514,7 +547,7 @@ class ConfigImporter:
                     project = self.id_to_project[project_id]
                 else:
                     # 如果找不到，尝试通过slug查找（兼容性）
-                    project_slug = key_data.get('project_id')
+                    project_slug = key_data.get("project_id")
                     if project_slug and project_slug in self.slug_to_project:
                         project = self.slug_to_project[project_slug]
 
@@ -532,11 +565,11 @@ class ConfigImporter:
                         project_key = ProjectKey.objects.create(
                             project=project,
                             public_key=public_key,
-                            name=key_data.get('name', ''),
-                            is_active=key_data.get('is_active', True),
-                            rate_limit_count=key_data.get('rate_limit_count'),
-                            rate_limit_window=key_data.get('rate_limit_window'),
-                            data=key_data.get('data', {})
+                            name=key_data.get("name", ""),
+                            is_active=key_data.get("is_active", True),
+                            rate_limit_count=key_data.get("rate_limit_count"),
+                            rate_limit_window=key_data.get("rate_limit_window"),
+                            data=key_data.get("data", {}),
                         )
                         self.log_info(f"创建项目密钥: {public_key}")
                         # DSN会根据当前GLITCHTIP_URL自动生成
@@ -547,7 +580,7 @@ class ConfigImporter:
         # 最后导入项目计数器
         for counter_data in project_counters_data:
             try:
-                project_id = counter_data.get('project')  # 这里存储的是原始ID
+                project_id = counter_data.get("project")  # 这里存储的是原始ID
 
                 # 先尝试通过ID查找项目，如果失败再尝试slug
                 project = None
@@ -555,7 +588,7 @@ class ConfigImporter:
                     project = self.id_to_project[project_id]
                 else:
                     # 如果找不到，尝试通过slug查找（兼容性）
-                    project_slug = counter_data.get('project_id')
+                    project_slug = counter_data.get("project_id")
                     if project_slug and project_slug in self.slug_to_project:
                         project = self.slug_to_project[project_slug]
 
@@ -571,8 +604,7 @@ class ConfigImporter:
                         self.log_info(f"项目计数器已存在，跳过创建")
                     else:
                         counter = ProjectCounter.objects.create(
-                            project=project,
-                            value=counter_data.get('value', 1)
+                            project=project, value=counter_data.get("value", 1)
                         )
                         self.log_info(f"创建项目计数器")
 
@@ -585,10 +617,10 @@ class ConfigImporter:
 
         for team_data in teams_data:
             try:
-                slug = team_data['slug']
-                org_slug = team_data.get('organization_slug', '')
-                member_emails = team_data.pop('member_emails', [])
-                project_slugs = team_data.pop('project_slugs', [])
+                slug = team_data["slug"]
+                org_slug = team_data.get("organization_slug", "")
+                member_emails = team_data.pop("member_emails", [])
+                project_slugs = team_data.pop("project_slugs", [])
 
                 if org_slug not in self.slug_to_org:
                     self.log_error(f"团队 {slug} 的组织 {org_slug} 不存在")
@@ -604,17 +636,16 @@ class ConfigImporter:
                         team = Team.objects.get(slug=slug, organization=org)
                         self.log_info(f"团队 {slug} 已存在，跳过创建")
                     else:
-                        team = Team.objects.create(
-                            slug=slug,
-                            organization=org
-                        )
+                        team = Team.objects.create(slug=slug, organization=org)
                         self.log_info(f"创建团队: {slug}")
 
                     # 添加成员
                     for email in member_emails:
                         if email in self.email_to_user:
                             user = self.email_to_user[email]
-                            org_user = OrganizationUser.objects.filter(user=user, organization=org).first()
+                            org_user = OrganizationUser.objects.filter(
+                                user=user, organization=org
+                            ).first()
                             if org_user:
                                 team.members.add(org_user)
 
@@ -624,10 +655,12 @@ class ConfigImporter:
                             project = self.slug_to_project[project_slug]
                             team.projects.add(project)
 
-                self.import_stats['teams'] += 1
+                self.import_stats["teams"] += 1
 
             except Exception as e:
-                self.log_error(f"导入团队失败 {team_data.get('slug', 'unknown')}: {str(e)}")
+                self.log_error(
+                    f"导入团队失败 {team_data.get('slug', 'unknown')}: {str(e)}"
+                )
 
     def import_alerts(self, alerts_data, recipients_data):
         """导入告警配置"""
@@ -638,7 +671,7 @@ class ConfigImporter:
         # 先导入告警规则
         for alert_data in alerts_data:
             try:
-                project_slug = alert_data.get('project_slug', '')
+                project_slug = alert_data.get("project_slug", "")
                 project = self.slug_to_project.get(project_slug)
 
                 if not project:
@@ -650,16 +683,16 @@ class ConfigImporter:
                 if not self.dry_run:
                     alert = ProjectAlert.objects.create(
                         project=project,
-                        name=alert_data.get('name', ''),
-                        timespan_minutes=alert_data.get('timespan_minutes'),
-                        quantity=alert_data.get('quantity'),
-                        uptime=alert_data.get('uptime', False)
+                        name=alert_data.get("name", ""),
+                        timespan_minutes=alert_data.get("timespan_minutes"),
+                        quantity=alert_data.get("quantity"),
+                        uptime=alert_data.get("uptime", False),
                     )
                     self.log_info(f"创建告警规则: {alert.name}")
                     # 保存映射关系：原始ID -> 新创建的告警规则
-                    alert_mapping[alert_data.get('id')] = alert
+                    alert_mapping[alert_data.get("id")] = alert
 
-                self.import_stats['alerts'] += 1
+                self.import_stats["alerts"] += 1
 
             except Exception as e:
                 self.log_error(f"导入告警规则失败: {str(e)}")
@@ -667,9 +700,9 @@ class ConfigImporter:
         # 然后导入告警接收者
         for recipient_data in recipients_data:
             try:
-                alert_id = recipient_data.get('alert')  # 原始告警规则ID
-                recipient_type = recipient_data.get('recipient_type')
-                url = recipient_data.get('url', '')
+                alert_id = recipient_data.get("alert")  # 原始告警规则ID
+                recipient_type = recipient_data.get("recipient_type")
+                url = recipient_data.get("url", "")
 
                 # 根据原始ID查找新创建的告警规则
                 alert = None
@@ -677,12 +710,14 @@ class ConfigImporter:
                     alert = alert_mapping[alert_id]
                 else:
                     # 如果找不到对应告警规则，尝试通过项目名称和告警名称查找
-                    project_slug = recipient_data.get('project_slug')
-                    alert_name = recipient_data.get('alert_name')
+                    project_slug = recipient_data.get("project_slug")
+                    alert_name = recipient_data.get("alert_name")
                     if project_slug and alert_name:
                         project = self.slug_to_project.get(project_slug)
                         if project:
-                            alert = ProjectAlert.objects.filter(project=project, name=alert_name).first()
+                            alert = ProjectAlert.objects.filter(
+                                project=project, name=alert_name
+                            ).first()
 
                 if not alert:
                     self.log_error(f"告警接收者的告警规则不存在: alert_id={alert_id}")
@@ -693,9 +728,7 @@ class ConfigImporter:
                 if not self.dry_run:
                     # 检查接收者是否已存在
                     if AlertRecipient.objects.filter(
-                        alert=alert,
-                        recipient_type=recipient_type,
-                        url=url
+                        alert=alert, recipient_type=recipient_type, url=url
                     ).exists():
                         self.log_info(f"告警接收者已存在，跳过创建")
                     else:
@@ -703,7 +736,9 @@ class ConfigImporter:
                             alert=alert,
                             recipient_type=recipient_type,
                             url=url,
-                            tags_to_add=self._sanitize_tags_array(recipient_data.get('tags_to_add'))
+                            tags_to_add=self._sanitize_tags_array(
+                                recipient_data.get("tags_to_add")
+                            ),
                         )
                         self.log_info(f"创建告警接收者: {recipient_type} - {url}")
 
@@ -717,8 +752,8 @@ class ConfigImporter:
 
         for notification_data in notifications_data:
             try:
-                project_slug = notification_data.get('project_slug', '')
-                alert_name = notification_data.get('project_alert_name', '')
+                project_slug = notification_data.get("project_slug", "")
+                alert_name = notification_data.get("project_alert_name", "")
                 project = self.slug_to_project.get(project_slug)
 
                 if not project:
@@ -727,13 +762,15 @@ class ConfigImporter:
 
                 # 查找对应的告警规则
                 alert = None
-                alert_id = notification_data.get('project_alert')  # 原始ID
+                alert_id = notification_data.get("project_alert")  # 原始ID
                 if alert_id and alert_id in alert_mapping:
                     alert = alert_mapping[alert_id]
                 else:
                     # 通过项目名称和告警名称查找
                     if alert_name:
-                        alert = ProjectAlert.objects.filter(project=project, name=alert_name).first()
+                        alert = ProjectAlert.objects.filter(
+                            project=project, name=alert_name
+                        ).first()
 
                 if not alert:
                     self.log_error(f"通知历史的告警规则不存在: {alert_name}")
@@ -744,13 +781,14 @@ class ConfigImporter:
                 if not self.dry_run:
                     notification = Notification.objects.create(
                         project_alert=alert,
-                        is_sent=notification_data.get('is_sent', False)
+                        is_sent=notification_data.get("is_sent", False),
                     )
 
                     # 关联issues
-                    issue_ids = notification_data.get('issue_ids', [])
+                    issue_ids = notification_data.get("issue_ids", [])
                     if issue_ids:
                         from apps.issue_events.models import Issue
+
                         issues = Issue.objects.filter(id__in=issue_ids)
                         notification.issues.add(*issues)
 
@@ -766,8 +804,8 @@ class ConfigImporter:
         # 先导入环境
         for env_data in envs_data:
             try:
-                name = env_data['name']
-                org_slug = env_data.get('organization_slug', '')
+                name = env_data["name"]
+                org_slug = env_data.get("organization_slug", "")
 
                 if org_slug not in self.slug_to_org:
                     self.log_error(f"环境 {name} 的组织 {org_slug} 不存在")
@@ -783,42 +821,45 @@ class ConfigImporter:
                         env = Environment.objects.get(name=name, organization=org)
                         self.log_info(f"环境 {name} 已存在，跳过创建")
                     else:
-                        env = Environment.objects.create(
-                            name=name,
-                            organization=org
-                        )
+                        env = Environment.objects.create(name=name, organization=org)
                         self.log_info(f"创建环境: {name}")
 
-                self.import_stats['environments'] += 1
+                self.import_stats["environments"] += 1
 
             except Exception as e:
-                self.log_error(f"导入环境失败 {env_data.get('name', 'unknown')}: {str(e)}")
+                self.log_error(
+                    f"导入环境失败 {env_data.get('name', 'unknown')}: {str(e)}"
+                )
 
         # 然后导入环境项目关联
         for env_proj_data in env_projects_data:
             try:
-                project_slug = env_proj_data.get('project_slug', '')
-                env_name = env_proj_data.get('environment_name', '')
+                project_slug = env_proj_data.get("project_slug", "")
+                env_name = env_proj_data.get("environment_name", "")
 
                 project = self.slug_to_project.get(project_slug)
                 if not project:
                     self.log_error(f"环境项目关联的项目 {project_slug} 不存在")
                     continue
 
-                env = Environment.objects.filter(name=env_name, organization=project.organization).first()
+                env = Environment.objects.filter(
+                    name=env_name, organization=project.organization
+                ).first()
                 if not env:
                     self.log_error(f"环境 {env_name} 不存在")
                     continue
 
                 if not self.dry_run:
                     # 检查关联是否已存在
-                    if EnvironmentProject.objects.filter(project=project, environment=env).exists():
+                    if EnvironmentProject.objects.filter(
+                        project=project, environment=env
+                    ).exists():
                         self.log_info(f"环境项目关联已存在")
                     else:
                         env_proj = EnvironmentProject.objects.create(
                             project=project,
                             environment=env,
-                            is_hidden=env_proj_data.get('is_hidden', False)
+                            is_hidden=env_proj_data.get("is_hidden", False),
                         )
                         self.log_info(f"创建环境项目关联")
 
@@ -831,10 +872,10 @@ class ConfigImporter:
 
         for token_data in tokens_data:
             try:
-                user_email = token_data.get('user_email', '')
-                token = token_data.get('token', '')
-                label = token_data.get('label', '')
-                scopes_list = token_data.get('scopes_list', [])
+                user_email = token_data.get("user_email", "")
+                token = token_data.get("token", "")
+                label = token_data.get("label", "")
+                scopes_list = token_data.get("scopes_list", [])
 
                 if user_email not in self.email_to_user:
                     self.log_error(f"API令牌的用户 {user_email} 不存在")
@@ -850,16 +891,14 @@ class ConfigImporter:
                         self.log_info(f"API令牌已存在，跳过创建")
                     else:
                         api_token = APIToken.objects.create(
-                            token=token,
-                            user=user,
-                            label=label
+                            token=token, user=user, label=label
                         )
                         # 设置权限范围
                         if scopes_list:
                             api_token.add_permissions(scopes_list)
                         self.log_info(f"创建API令牌: {label}")
 
-                self.import_stats['api_tokens'] += 1
+                self.import_stats["api_tokens"] += 1
 
             except Exception as e:
                 self.log_error(f"导入API令牌失败: {str(e)}")
@@ -867,7 +906,7 @@ class ConfigImporter:
     def import_all(self, export_data):
         """导入所有配置数据"""
         try:
-            data = export_data.get('data', {})
+            data = export_data.get("data", {})
             alert_mapping = {}
 
             # 第一阶段：核心数据（用户、组织、项目）- 在单个事务中
@@ -876,30 +915,29 @@ class ConfigImporter:
                     if self.dry_run:
                         print("=== 试运行模式，不会实际修改数据 ===")
 
-                    if 'users' in data:
-                        self.import_users(data['users'])
+                    if "users" in data:
+                        self.import_users(data["users"])
 
-                    if 'organizations' in data and 'organization_users' in data:
+                    if "organizations" in data and "organization_users" in data:
                         self.import_organizations(
-                            data['organizations'],
-                            data['organization_users'],
-                            data.get('organization_owners', [])
+                            data["organizations"],
+                            data["organization_users"],
+                            data.get("organization_owners", []),
                         )
 
-                    if 'projects' in data:
+                    if "projects" in data:
                         self.import_projects(
-                            data['projects'],
-                            data.get('project_keys', []),
-                            data.get('project_counters', [])
+                            data["projects"],
+                            data.get("project_keys", []),
+                            data.get("project_counters", []),
                         )
 
-                    if 'teams' in data:
-                        self.import_teams(data['teams'])
+                    if "teams" in data:
+                        self.import_teams(data["teams"])
 
-                    if 'environments' in data:
+                    if "environments" in data:
                         self.import_environments(
-                            data['environments'],
-                            data.get('environment_projects', [])
+                            data["environments"], data.get("environment_projects", [])
                         )
 
             except Exception as e:
@@ -908,10 +946,9 @@ class ConfigImporter:
             # 第二阶段：告警配置 - 单独事务
             try:
                 with transaction.atomic():
-                    if 'project_alerts' in data:
+                    if "project_alerts" in data:
                         alert_mapping = self.import_alerts(
-                            data['project_alerts'],
-                            data.get('alert_recipients', [])
+                            data["project_alerts"], data.get("alert_recipients", [])
                         )
             except Exception as e:
                 self.log_error(f"告警配置导入失败: {str(e)}")
@@ -919,16 +956,16 @@ class ConfigImporter:
             # 第三阶段：API令牌 - 单独事务
             try:
                 with transaction.atomic():
-                    if 'api_tokens' in data:
-                        self.import_api_tokens(data['api_tokens'])
+                    if "api_tokens" in data:
+                        self.import_api_tokens(data["api_tokens"])
             except Exception as e:
                 self.log_error(f"API令牌导入失败: {str(e)}")
 
             # 第四阶段：通知历史 - 单独事务
             try:
                 with transaction.atomic():
-                    if 'notifications' in data:
-                        self.import_notifications(data['notifications'], alert_mapping)
+                    if "notifications" in data:
+                        self.import_notifications(data["notifications"], alert_mapping)
             except Exception as e:
                 self.log_error(f"通知历史导入失败: {str(e)}")
 
@@ -952,26 +989,37 @@ class ConfigImporter:
         print(f"环境: {self.import_stats['environments']}")
         print(f"API令牌: {self.import_stats['api_tokens']}")
 
-        if self.import_stats['errors']:
+        if self.import_stats["errors"]:
             print(f"错误: {len(self.import_stats['errors'])}")
-            for error in self.import_stats['errors']:
+            for error in self.import_stats["errors"]:
                 print(f"  - {error}")
+
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description='Glitchtip 配置管理脚本')
-    subparsers = parser.add_subparsers(dest='command', help='可用命令')
+    parser = argparse.ArgumentParser(description="Glitchtip 配置管理脚本")
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
     # 导出命令
-    export_parser = subparsers.add_parser('export', help='导出配置数据')
-    export_parser.add_argument('--output', '-o', help='输出文件路径 (默认输出到标准输出)')
-    export_parser.add_argument('--format', choices=['json'], default='json', help='输出格式')
+    export_parser = subparsers.add_parser("export", help="导出配置数据")
+    export_parser.add_argument(
+        "--output", "-o", help="输出文件路径 (默认输出到标准输出)"
+    )
+    export_parser.add_argument(
+        "--format", choices=["json"], default="json", help="输出格式"
+    )
 
     # 导入命令
-    import_parser = subparsers.add_parser('import', help='导入配置数据')
-    import_parser.add_argument('input_file', nargs='?', help='输入文件路径 (默认从标准输入读取)')
-    import_parser.add_argument('--dry-run', action='store_true', help='试运行模式，不实际修改数据')
-    import_parser.add_argument('--format', choices=['json'], default='json', help='输入格式')
+    import_parser = subparsers.add_parser("import", help="导入配置数据")
+    import_parser.add_argument(
+        "input_file", nargs="?", help="输入文件路径 (默认从标准输入读取)"
+    )
+    import_parser.add_argument(
+        "--dry-run", action="store_true", help="试运行模式，不实际修改数据"
+    )
+    import_parser.add_argument(
+        "--format", choices=["json"], default="json", help="输入格式"
+    )
 
     args = parser.parse_args()
 
@@ -981,7 +1029,7 @@ def main():
 
     success = False
 
-    if args.command == 'export':
+    if args.command == "export":
         exporter = ConfigExporter()
 
         if exporter.export_all():
@@ -990,24 +1038,24 @@ def main():
 
             if args.output:
                 try:
-                    with open(args.output, 'w', encoding='utf-8') as f:
+                    with open(args.output, "w", encoding="utf-8") as f:
                         f.write(output_json)
                     success = True
                 except Exception as e:
                     sys.stderr.write(f"写入文件失败: {str(e)}\n")
             else:
-                print(output_json, end='')
+                print(output_json)
                 success = True
         else:
             sys.stderr.write("导出失败\n")
 
-    elif args.command == 'import':
+    elif args.command == "import":
         print("开始导入配置数据...")
 
         # 读取输入数据
         if args.input_file:
             try:
-                with open(args.input_file, 'r', encoding='utf-8') as f:
+                with open(args.input_file, "r", encoding="utf-8") as f:
                     export_data = json.load(f)
             except Exception as e:
                 print(f"读取文件失败: {str(e)}")
@@ -1024,7 +1072,7 @@ def main():
                 sys.exit(1)
 
         # 验证导出数据格式
-        if 'data' not in export_data:
+        if "data" not in export_data:
             print("错误: 无效的导出数据格式")
             sys.exit(1)
 
@@ -1038,5 +1086,7 @@ def main():
     if not success:
         sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
+

@@ -36,7 +36,7 @@ RUN pip install gunicorn psutil psycopg2-binary requests && \
 
 # 复制配置文件
 COPY conf/bin/ /code/bin/
-COPY conf/supervisor/ /etc/supervisor/conf.d/
+COPY conf/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
 COPY conf/etc/entrypoint.sh /entrypoint.sh
 COPY conf/etc/crontab /etc/crontab
 COPY conf/etc/pip.conf /etc/pip.conf
@@ -46,6 +46,7 @@ COPY conf/etc/environment.sh /code/etc/environment.sh
 RUN chmod +x /code/bin/*.sh /entrypoint.sh && \
     cp /code/bin/health-check /usr/local/bin/ && \
     cp /code/bin/process_monitor /usr/local/bin/ && \
+    mkdir -p /etc/supervisor/conf.d/ && \
     chmod +x /usr/local/bin/* && \
     chmod +x /code/bin/*.py
 
@@ -59,4 +60,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
 WORKDIR /code
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
